@@ -1,0 +1,58 @@
+project:
+  title: "NLP Text Classification Project"
+  task: "text_classification"
+  domain: "replace-with-domain"
+  application_area: "replace-with-application-area"
+  github_repo_url: "replace-with-private-repo-url"
+  random_seed: 42
+
+proposal:
+  motivation: "Explain why this NLP problem is important."
+  problem_statement: "Describe the problem being solved."
+  expected_product: "Describe the final NLP system or output."
+  process_improvement: "Explain what manual/slow/limited process this improves."
+  research_questions:
+    - "RQ1: Replace with a clear objective or research question."
+    - "RQ2: Replace with a measurable comparison or analysis goal."
+
+data:
+  path: "data/sample_dataset.csv"
+  text_column: "text"
+  label_column: "label"
+  id_column: "id"
+  source: "Sample local CSV for reproducible development; replace with final dataset source."
+  provenance: "Created for smoke testing only; not a final research dataset."
+  domain: "demo"
+  challenges:
+    - "Small sample dataset is not suitable for final claims."
+    - "Replace with real dataset and document noise, imbalance, or language issues."
+
+model:
+  type: "tfidf_logistic_regression"
+  test_size: 0.2
+  max_features: 5000
+  ngram_range: [1, 2]
+  class_weight: "balanced"
+  artifact_path: "artifacts/model.joblib"
+
+reports:
+  directory: "reports"
+
+team:
+  members:
+    - name: "Team Member 1"
+      responsibilities:
+        - "Data collection and preprocessing"
+        - "Dataset documentation"
+    - name: "Team Member 2"
+      responsibilities:
+        - "Feature engineering and modelling"
+        - "Experiment tracking"
+    - name: "Team Member 3"
+      responsibilities:
+        - "Evaluation and error analysis"
+        - "Visualisation and reporting"
+    - name: "Team Member 4"
+      responsibilities:
+        - "System/demo development"
+        - "Proposal PDF and submission checklist"

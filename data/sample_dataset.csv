@@ -1,0 +1,13 @@
+id,text,label
+1,"This course project scaffold is useful and clear.",positive
+2,"The setup instructions are practical and easy to follow.",positive
+3,"The demo pipeline runs quickly for our team.",positive
+4,"The baseline model gives us a helpful starting point.",positive
+5,"The dataset documentation makes replacement straightforward.",positive
+6,"The command line interface makes testing convenient.",positive
+7,"The sample data is too small for final research claims.",negative
+8,"The placeholder domain still needs real project details.",negative
+9,"The current dataset cannot support a serious evaluation.",negative
+10,"The draft proposal lacks the final GitHub repository link.",negative
+11,"The team responsibilities are not yet personalized.",negative
+12,"The sample examples should be replaced before submission.",negative

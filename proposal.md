@@ -15,7 +15,7 @@ A prototype that accepts an article or news URL and returns a generated summary,
 - RQ3: Which article characteristics drive summary-quality differences between methods?
 
 ## Dataset
-Source: Bundled sample of 24 article-highlight pairs for offline tests; full CNN/DailyMail and XSum are fetched via scripts/fetch_datasets.py. Bundled rows are author-written; full datasets come from the HF hub. Size: 24 article-summary pairs; article mean 81 tokens, summary mean 24 tokens. Domain: English digital news articles. Challenges: Long articles exceed BART's 1024-token cap.; Webpage noise (HTML, ads) must be removed before summarisation.; Near-duplicate articles bias ROUGE if not deduplicated.; Article length varies widely across outlets.
+Source: Bundled sample of 24 article-highlight pairs for offline tests; full CNN/DailyMail and XSum are fetched via scripts/fetch_datasets.py. Bundled rows are author-written; full datasets come from the HF hub. Size: 24 article-summary pairs; article mean 198 tokens, summary mean 27 tokens. Domain: English digital news articles. Challenges: Long articles exceed BART's 1024-token cap.; Webpage noise (HTML, ads) must be removed before summarisation.; Near-duplicate articles bias ROUGE if not deduplicated.; Article length varies widely across outlets.
 
 ## Team responsibilities
 - **Nguyen Hoang Hieu (Ethan)**: Data collection, web scraping, and dataset organisation; Hugging Face dataset fetch scripts

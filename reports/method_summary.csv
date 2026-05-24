@@ -1,3 +1,4 @@
 method,n_examples,rouge1,rouge2,rougeL,rougeLsum,mean_summary_length,mean_compression_ratio,mean_inference_seconds
-lead_3,6,0.359,0.1211,0.2571,0.2571,68.67,0.8269,0.0
-textrank,6,0.3672,0.1276,0.2693,0.2693,68.67,0.8304,0.0138
+lead_3,6,0.3467,0.1167,0.2414,0.2414,71.33,0.3679,0.0
+textrank,6,0.2733,0.0618,0.1818,0.1818,61.17,0.3145,0.0155
+bart,6,0.3354,0.1135,0.2355,0.2355,50.0,0.2573,4.1383

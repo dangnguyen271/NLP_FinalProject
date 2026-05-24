@@ -2,27 +2,40 @@
   {
     "method": "lead_3",
     "rouge": {
-      "rouge1": 0.35899864885217636,
-      "rouge2": 0.12111276979257503,
-      "rougeL": 0.257071832344203,
-      "rougeLsum": 0.257071832344203
+      "rouge1": 0.3467376477390552,
+      "rouge2": 0.1167272151480519,
+      "rougeL": 0.24144191896539488,
+      "rougeLsum": 0.24144191896539488
     },
-    "mean_summary_length": 68.66666666666667,
-    "mean_compression_ratio": 0.8269049764840597,
-    "mean_inference_seconds": 2.1763834107938845e-05,
+    "mean_summary_length": 71.33333333333333,
+    "mean_compression_ratio": 0.3678969246691698,
+    "mean_inference_seconds": 3.1819334253668785e-05,
     "n_examples": 6
   },
   {
     "method": "textrank",
     "rouge": {
-      "rouge1": 0.3672331585925357,
-      "rouge2": 0.12758408174156802,
-      "rougeL": 0.269266769335237,
-      "rougeLsum": 0.269266769335237
+      "rouge1": 0.27330448916810696,
+      "rouge2": 0.06178095074073882,
+      "rougeL": 0.18179860768457617,
+      "rougeLsum": 0.18179860768457617
     },
-    "mean_summary_length": 68.66666666666667,
-    "mean_compression_ratio": 0.8304208980150837,
-    "mean_inference_seconds": 0.013778187501278202,
+    "mean_summary_length": 61.166666666666664,
+    "mean_compression_ratio": 0.3144647073287843,
+    "mean_inference_seconds": 0.0155225206593362,
+    "n_examples": 6
+  },
+  {
+    "method": "bart",
+    "rouge": {
+      "rouge1": 0.33538301916909724,
+      "rouge2": 0.11352141615299509,
+      "rougeL": 0.23548012554803724,
+      "rougeLsum": 0.23548012554803724
+    },
+    "mean_summary_length": 50.0,
+    "mean_compression_ratio": 0.25727368192638556,
+    "mean_inference_seconds": 4.138273541660358,
     "n_examples": 6
   }
 ]

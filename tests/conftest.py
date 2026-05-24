@@ -12,52 +12,64 @@ def repo_root() -> Path:
 
 
 @pytest.fixture
-def tiny_dataset_path(repo_root: Path) -> Path:
-    return repo_root / "tests" / "fixtures" / "tiny_text_classification.csv"
+def tiny_news_path(repo_root: Path) -> Path:
+    return repo_root / "tests" / "fixtures" / "tiny_news.csv"
 
 
 @pytest.fixture
-def write_config(tmp_path: Path, tiny_dataset_path: Path):
+def write_config(tmp_path: Path, tiny_news_path: Path):
     def _write_config(overrides: dict | None = None) -> Path:
         config = {
             "project": {
-                "title": "Fixture Text Classification Project",
-                "task": "text_classification",
-                "domain": "education",
-                "application_area": "course project support",
-                "github_repo_url": "https://github.com/example/private-nlp-project",
+                "title": "Fixture NewsDigest Project",
+                "task": "text_summarization",
+                "domain": "digital news media",
+                "application_area": "automatic news summarisation",
+                "github_repo_url": "https://github.com/example/newsdigest",
                 "random_seed": 123,
             },
             "proposal": {
-                "motivation": "Fast feedback on short text helps teams inspect project notes.",
-                "problem_statement": "Manual sorting of short project notes is slow.",
-                "expected_product": "A small text classification tool for demonstration.",
-                "process_improvement": "It reduces manual review of simple text categories.",
+                "motivation": "News volume makes manual scanning slow.",
+                "problem_statement": "Generate short faithful summaries of news.",
+                "expected_product": "A small prototype summariser with web demo.",
+                "process_improvement": "Reduces time spent reading full articles.",
                 "research_questions": [
-                    "RQ1: How well does a TF-IDF baseline classify the selected labels?",
-                    "RQ2: Which errors reveal useful data-cleaning priorities?",
+                    "RQ1: How well can a Lead-3 baseline summarise news?",
+                    "RQ2: Does TextRank materially improve ROUGE over Lead-3?",
                 ],
             },
             "data": {
-                "path": str(tiny_dataset_path),
-                "text_column": "text",
-                "label_column": "label",
+                "path": str(tiny_news_path),
+                "text_column": "article",
+                "summary_column": "highlights",
                 "id_column": "id",
+                "source_column": "source",
                 "source": "Local fixture dataset for tests.",
                 "provenance": "Created for deterministic offline testing.",
-                "domain": "education",
+                "domain": "test",
                 "challenges": [
                     "Small dataset size.",
-                    "Short texts may lack enough context.",
+                    "Short articles limit summarisation quality.",
                 ],
             },
             "model": {
-                "type": "tfidf_logistic_regression",
-                "test_size": 0.25,
-                "max_features": 1000,
-                "ngram_range": [1, 2],
-                "class_weight": "balanced",
-                "artifact_path": str(tmp_path / "artifacts" / "model.joblib"),
+                "baseline": "lead_3",
+                "extractive": "textrank",
+                "abstractive": "facebook/bart-large-cnn",
+                "max_input_tokens": 1024,
+                "min_summary_tokens": 20,
+                "max_summary_tokens": 80,
+                "num_sentences_extractive": 2,
+                "artifact_dir": str(tmp_path / "artifacts"),
+                "use_abstractive": False,
+            },
+            "evaluation": {
+                "rouge_variants": ["rouge1", "rouge2", "rougeL"],
+                "max_examples": 8,
+            },
+            "scrape": {
+                "user_agent": "NewsDigestTest/0.1",
+                "request_timeout_seconds": 5,
             },
             "reports": {
                 "directory": str(tmp_path / "reports"),
@@ -66,24 +78,23 @@ def write_config(tmp_path: Path, tiny_dataset_path: Path):
                 "members": [
                     {
                         "name": "Tester One",
-                        "responsibilities": [
-                            "Data collection and preprocessing",
-                            "Dataset documentation",
-                        ],
+                        "email": "one@example.com",
+                        "responsibilities": ["Data collection", "Web scraping"],
                     },
                     {
                         "name": "Tester Two",
-                        "responsibilities": [
-                            "Feature engineering and modelling",
-                            "Evaluation and error analysis",
-                        ],
+                        "email": "two@example.com",
+                        "responsibilities": ["Preprocessing", "EDA"],
                     },
                     {
                         "name": "Tester Three",
-                        "responsibilities": [
-                            "Visualisation and reporting",
-                            "System/demo development",
-                        ],
+                        "email": "three@example.com",
+                        "responsibilities": ["Summarisation modelling"],
+                    },
+                    {
+                        "name": "Tester Four",
+                        "email": "four@example.com",
+                        "responsibilities": ["Evaluation", "Streamlit demo"],
                     },
                 ],
             },

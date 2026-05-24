@@ -1,52 +1,88 @@
+"""Text cleaning and segmentation for news articles."""
+
 from __future__ import annotations
 
-from collections.abc import Iterable
 import re
-import string
 import unicodedata
+from typing import Iterable
 
-from sklearn.base import BaseEstimator, TransformerMixin
+from bs4 import BeautifulSoup
 
 
 _WHITESPACE_RE = re.compile(r"\s+")
-_PUNCT_TRANSLATION = str.maketrans("", "", string.punctuation)
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_BOILERPLATE_PATTERNS = (
+    re.compile(r"^\s*(share this article|read more|advertisement|sponsored)\s*[:\-]?\s*",
+               re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\bclick here to .*?(\.|$)", re.IGNORECASE),
+    re.compile(r"\bcopyright\s+©.*?(\.|$)", re.IGNORECASE),
+)
 
 
-def normalize_text(
-    value: object,
-    *,
-    lowercase: bool = True,
-    remove_punctuation: bool = False,
-) -> str:
-    """Normalize text deterministically without external resources."""
-
+def strip_html(value: object) -> str:
     if value is None:
         return ""
     text = str(value)
-    text = "".join(" " if unicodedata.category(char)[0] == "C" else char for char in text)
-    if lowercase:
-        text = text.lower()
-    if remove_punctuation:
-        text = text.translate(_PUNCT_TRANSLATION)
+    if "<" not in text:
+        return text
+    soup = BeautifulSoup(text, "lxml")
+    for tag in soup(["script", "style", "noscript", "iframe"]):
+        tag.decompose()
+    return soup.get_text(" ", strip=True)
+
+
+def normalize_article(value: object) -> str:
+    """Deterministic normalisation suitable for summarisation models.
+
+    Unlike a classification preprocessor, this preserves casing and punctuation
+    because both are signals the summariser uses for fluency. We only:
+      - strip Unicode control characters
+      - normalise unicode (NFKC) so curly quotes and ligatures behave predictably
+      - drop common boilerplate phrases
+      - collapse repeated whitespace
+    """
+
+    if value is None:
+        return ""
+    text = unicodedata.normalize("NFKC", str(value))
+    text = _CONTROL_RE.sub(" ", text)
+    for pattern in _BOILERPLATE_PATTERNS:
+        text = pattern.sub("", text)
     return _WHITESPACE_RE.sub(" ", text).strip()
 
 
-class TextNormalizer(BaseEstimator, TransformerMixin):
-    """Scikit-learn transformer wrapping the project text normalizer."""
+def split_sentences(text: str) -> list[str]:
+    """Lightweight regex sentence splitter.
 
-    def __init__(self, lowercase: bool = True, remove_punctuation: bool = False):
-        self.lowercase = lowercase
-        self.remove_punctuation = remove_punctuation
+    Avoids the NLTK punkt download in CI/offline environments. Handles common
+    abbreviations (Mr., Mrs., Dr., U.S., e.g., i.e.) by joining the trailing
+    period back into the preceding token before splitting.
+    """
 
-    def fit(self, texts: Iterable[object], y: object = None) -> "TextNormalizer":
-        return self
+    if not text:
+        return []
+    masked = text
+    abbreviations = (
+        "Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "Sr.", "Jr.",
+        "St.", "U.S.", "U.K.", "e.g.", "i.e.", "etc.", "vs.", "No.",
+    )
+    for abbr in abbreviations:
+        masked = masked.replace(abbr, abbr.replace(".", "<<DOT>>"))
+    # Split on sentence terminators followed by whitespace and a capital letter
+    # OR the end of the string.
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z\"'(])", masked)
+    return [part.replace("<<DOT>>", ".").strip() for part in parts if part.strip()]
 
-    def transform(self, texts: Iterable[object]) -> list[str]:
-        return [
-            normalize_text(
-                text,
-                lowercase=self.lowercase,
-                remove_punctuation=self.remove_punctuation,
-            )
-            for text in texts
-        ]
+
+def deduplicate(rows: Iterable[dict]) -> list[dict]:
+    """Drop exact-article duplicates while preserving order."""
+
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for row in rows:
+        key = (row.get("article") or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    return deduped

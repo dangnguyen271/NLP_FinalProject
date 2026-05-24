@@ -1,71 +1,74 @@
 # Dataset Description
 
-## Source and provenance
+NewsDigest uses three sources of news article + summary pairs:
 
-`data/sample_dataset.csv` is a curated corpus of 200 short English course-feedback
-statements written for this NLP final project. The statements were authored to mirror
-patterns commonly observed in real student feedback (course evaluations, post-class
-surveys, anonymous comment cards) while remaining redistributable inside a private
-academic repository. The dataset can be regenerated deterministically by re-running the
-scripted augmentation utilities under `scripts/`.
+1. **Bundled sample** — `data/news_sample.csv` (24 short article + highlight pairs, redistributable inside the private course repo). Used by the offline pipeline, smoke tests, and CI.
+2. **CNN/DailyMail v3.0.0** — primary benchmark dataset (Hermann et al. 2015; See et al. 2017). Long articles paired with multi-sentence reference highlights. Fetched on demand by `scripts/fetch_datasets.py`.
+3. **XSum** — secondary benchmark dataset (Narayan et al. 2018). BBC articles paired with single-sentence, highly abstractive summaries. Fetched on demand by the same script.
 
-For comparison and external validity, the codebase is also capable of consuming
-publicly available text-classification datasets that follow the same `id,text,label`
-schema (e.g. IMDB sentiment, SST-2, Amazon polarity). Drop a compatible CSV into
-`data/` and point `config/project_config.yaml` at it; no code changes are required.
+In addition the team scrapes a small set of recent articles (≤ 20) at presentation time for the live demo via `scripts/fetch_recent.py` (uses BeautifulSoup over publicly accessible news pages).
 
-## Size and structure
+## Schema
 
-- Rows: 200 (100 positive, 100 negative)
-- Columns:
-  - `id` (int): unique row identifier.
-  - `text` (str): a single short English statement (5–25 tokens typical).
-  - `label` (str): one of `positive` or `negative`.
+Every CSV consumed by the pipeline must contain at least:
 
-The dataset is balanced by construction; class imbalance can be simulated for
-robustness testing by sub-sampling with the `scripts/run_pipeline.py` helper.
+- `id` (int/str): unique row identifier.
+- `article` (str): the full article body. Single document per row.
+- `highlights` (str): the reference / gold-standard summary.
 
-## Domain
+Optional columns:
 
-The domain is **higher-education course feedback** (specifically NLP/ML courses).
-This domain was chosen for three reasons:
+- `source` (str): outlet identifier (CNN, BBC, custom-scrape, …) used in error analysis.
+- `split` (str): when present, overrides the random train/test split. Values: `train`, `test`, `validation`.
 
-1. It is directly relevant to the COMP4020 / COMP5040 audience, who routinely produce
-   and consume such feedback.
-2. The vocabulary is rich enough (pedagogy, NLP terminology, organisational language)
-   to surface meaningful n-gram features for TF-IDF baselines.
-3. Sentiment is reliably resolvable from short snippets, keeping annotation noise low.
+## Size and structure of the bundled sample
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | int | 1–24 |
+| `source` | str | always `bundled` |
+| `article` | str | ~70–110 words per row |
+| `highlights` | str | one sentence, ~20–30 words |
+
+## CNN/DailyMail
+
+- ~287k train, ~13k validation, ~11k test article/highlight pairs.
+- Articles average ~780 tokens; highlights average ~56 tokens across 3-4 sentences.
+- Suitability: the canonical English summarisation benchmark; matches the project's RQ1/RQ2.
+- Known challenges: very long articles exceed the 1024-token cap of `bart-large-cnn`; near-duplicate articles appear across the corpus.
+
+## XSum
+
+- ~204k train, ~11k validation, ~11k test article/summary pairs.
+- Articles average ~430 tokens; summaries are a single sentence (~23 tokens) and highly abstractive.
+- Suitability: complements CNN/DailyMail with an extreme-summarisation style.
+- Known challenges: single-sentence reference makes ROUGE-2 punitive; many summaries contain content not literally present in the article.
 
 ## Suitability for the NLP task
 
-The dataset supports the configured **binary text classification** task. With 200
-balanced examples, stratified 80/20 splits leave 40 held-out test rows distributed
-evenly across classes, which is sufficient to demonstrate the full NLP pipeline
-(preprocessing → representation → modelling → evaluation) and to compare baselines.
-
-For the final report's *generalisation* discussion we additionally recommend a sanity
-check against an external public dataset (IMDB or SST-2) which the codebase supports
-out-of-the-box.
+All three corpora follow the same article+summary schema, which means the same preprocessing, summarisation, and evaluation code paths work without modification across the bundled sample, CNN/DailyMail, and XSum.
 
 ## Known challenges
 
-- **Domain shift:** the corpus is specific to course feedback; models trained on it
-  may not transfer to other sentiment domains without fine-tuning.
-- **Lexical ambiguity:** words like "challenging" or "rigorous" can be either
-  positive or negative depending on framing; the model must learn context.
-- **Short text:** each statement is a single sentence, limiting signal for
-  bag-of-words representations and motivating n-gram features.
-- **Author distribution:** statements share a single author voice; real-world
-  feedback varies more widely in style and length.
-- **Sarcasm / negation:** several rows include negation ("not unreasonable",
-  "I did not learn much") that test the model's ability to handle polarity flips.
+- **Long-form input:** CNN/DailyMail articles regularly exceed 1024 BART tokens, so the pipeline must truncate or chunk.
+- **HTML/boilerplate:** scraped articles include ads, share buttons, and "read more" links that must be cleaned before summarisation.
+- **Duplication:** near-duplicate stories across news aggregators bias ROUGE evaluation if not deduplicated.
+- **Style heterogeneity:** CNN, BBC, and blog posts differ in average length, vocabulary, and lead structure.
+- **Reference quality:** CNN/DailyMail highlights are bullet-style and often more extractive than a natural English summary.
 
 ## Replacement instructions
 
-1. Place the new CSV under `data/` (or document an external download script).
-2. Update `config/project_config.yaml`:
-   - `data.path`, `data.text_column`, `data.label_column`, optional `data.id_column`
-   - source, provenance, domain, and known challenges
-3. Update this README with the final dataset description.
-4. Run `python -m nlp_project.cli validate-data --config config/project_config.yaml`.
-5. Run the full pipeline with `python -m nlp_project.cli run-all`.
+1. Place a new CSV (article+highlights schema) under `data/` or document a fetch script.
+2. Update `config/project_config.yaml` → `data.path`, `text_column`, `summary_column`, `id_column`, `source`, `provenance`, `domain`, `challenges`.
+3. Update this README.
+4. Run `python -m nlp_project.cli validate-data && python -m nlp_project.cli run-all`.
+
+## Fetching the full benchmark datasets
+
+```bash
+pip install -e ".[data]"
+python scripts/fetch_datasets.py --dataset cnn_dailymail --split test --max-rows 200
+python scripts/fetch_datasets.py --dataset xsum --split test --max-rows 200
+```
+
+The script writes `data/cnn_dailymail.csv` and `data/xsum.csv` with the schema above. Large fetched files are git-ignored (see `.gitignore`).

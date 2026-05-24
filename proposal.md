@@ -1,30 +1,30 @@
-# Sentiment Analysis of Higher-Education Course Feedback
+# NewsDigest: News Collection and Automatic Summarisation
 
 ## NLP task and domain/application area
-Task: text_classification. Domain: higher education. Application area: automated analysis of student course feedback.
+Task: text_summarization. Domain: digital news media. Application area: automatic single-document summarisation of English news articles.
 
 ## Motivation and problem statement
-Universities collect thousands of free-text student comments every term but cannot read them all manually; automatic sentiment classification surfaces actionable signal for instructors, teaching assistants, and program directors. Given a short course-feedback statement, predict whether the underlying sentiment is positive or negative, and surface the lexical patterns that drive each decision so that the system remains interpretable.
+Digital news volume makes manual scanning infeasible; readers spend significant time finding the most relevant information. Given a single English news article, produce a short summary that is concise, readable, and faithful to the source.
 
 ## Expected final product
-A reproducible NLP pipeline plus an interactive Streamlit web demo that accepts free-text feedback and returns a label, a confidence score, and the top contributing n-grams. It improves: It replaces hours of manual triage of end-of-term surveys with a few seconds of automated, transparent inference.
+A prototype that accepts an article or news URL and returns a generated summary, with a comparison of methods and an evaluation of quality. It improves: It reduces the time required to read full-length articles.
 
 ## Research questions
-- RQ1: How accurately can a TF-IDF + logistic regression baseline classify positive vs. negative course feedback?
-- RQ2: Does swapping the classifier (Naive Bayes, Linear SVM) materially change accuracy, F1, or training time?
-- RQ3: Which n-gram features drive the model's decisions, and what does the error analysis reveal about its remaining failure modes?
+- RQ1: How effectively can an NLP system summarise newspaper articles concisely and informatively?
+- RQ2: Does BART outperform extractive baselines (Lead-3, TextRank) in ROUGE on CNN/DailyMail and XSum?
+- RQ3: Which article characteristics drive summary-quality differences between methods?
 
 ## Dataset
-Source: Curated corpus of 200 short English course-feedback statements assembled for this final project (see data/README.md for redistribution notes). Statements authored to mirror patterns observed in real student feedback; fully redistributable inside the private course repository. Size: 200 rows, 3 columns; labels: negative: 100, positive: 100. Domain: higher-education course feedback (NLP / ML courses). Challenges: Short single-sentence inputs limit context for bag-of-words models.; Lexical ambiguity (e.g. 'challenging', 'rigorous') flips polarity depending on context.; Negation and sarcasm can invert sentiment without changing the dominant tokens.; Author-style homogeneity (one cohort) means out-of-distribution generalisation must be verified separately.
+Source: Bundled sample of 24 article-highlight pairs for offline tests; full CNN/DailyMail and XSum are fetched via scripts/fetch_datasets.py. Bundled rows are author-written; full datasets come from the HF hub. Size: 24 article-summary pairs; article mean 81 tokens, summary mean 24 tokens. Domain: English digital news articles. Challenges: Long articles exceed BART's 1024-token cap.; Webpage noise (HTML, ads) must be removed before summarisation.; Near-duplicate articles bias ROUGE if not deduplicated.; Article length varies widely across outlets.
 
 ## Team responsibilities
-- **Team Member 1**: Data collection, curation, and preprocessing; Dataset documentation and license review
-- **Team Member 2**: Feature engineering (TF-IDF, n-grams); Model implementation and experiment tracking
-- **Team Member 3**: Cross-validation, evaluation, and error analysis; Visualisations for the final report
-- **Team Member 4**: Streamlit demo application (bonus deliverable); Proposal PDF, presentation slides, and submission checklist
+- **Nguyen Hoang Hieu (Ethan)**: Data collection, web scraping, and dataset organisation; Hugging Face dataset fetch scripts
+- **Thai Ba Hung**: Text cleaning and preprocessing (HTML, deduplication, sentence segmentation); Exploratory data analysis and length / vocabulary statistics
+- **Nguyen Quoc Dang**: Summarisation modelling (Lead-3, TextRank, BART); Hyperparameter sweeps and ablations
+- **Le Nguyen Gia Binh**: ROUGE evaluation, visualisation, and qualitative review; System integration, Streamlit prototype, and final report preparation
 
 ## GitHub repository link
-https://github.com/<your-team>/nlp-final-project
+https://github.com/thaibahung/NLP-Project
 
 ## Submission checklist
 - [ ] Private GitHub repo with collaborators `drelhaj` and `whistle-hikhi`.

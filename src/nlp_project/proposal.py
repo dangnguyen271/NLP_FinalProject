@@ -18,13 +18,12 @@ def generate_proposal_markdown(config: AppConfig) -> str:
         [
             f"# {config.project.title}",
             "",
-            "## Project title",
-            config.project.title,
-            "",
             "## NLP task and domain/application area",
-            f"- Task: {config.project.task}",
-            f"- Domain: {config.project.domain}",
-            f"- Application area: {config.project.application_area}",
+            (
+                f"Task: {config.project.task}. "
+                f"Domain: {config.project.domain}. "
+                f"Application area: {config.project.application_area}."
+            ),
             "",
             "## Motivation and problem statement",
             f"{config.proposal.motivation} {config.proposal.problem_statement}",
@@ -48,11 +47,9 @@ def generate_proposal_markdown(config: AppConfig) -> str:
             config.project.github_repo_url,
             "",
             "## Submission checklist",
-            "- [ ] Confirm the GitHub repository is private.",
-            "- [ ] Add instructor collaborators `drelhaj` and `whistle-hikhi`.",
-            "- [ ] Include the final GitHub repository link in the proposal PDF.",
-            "- [ ] Export the proposal PDF using 12 pt Times New Roman or a Times-compatible font.",
-            "- [ ] Submit the PDF to Canvas by the deadline.",
+            "- [ ] Private GitHub repo with collaborators `drelhaj` and `whistle-hikhi`.",
+            "- [ ] Final GitHub link included in this proposal and the PDF.",
+            "- [ ] Proposal PDF exported in 12 pt Times-compatible font, submitted to Canvas.",
             "",
         ]
     )
@@ -170,11 +167,10 @@ def _dataset_description(config: AppConfig) -> str:
 
     challenges = "; ".join(config.data.challenges)
     return (
-        f"Source/provenance: {config.data.source} {config.data.provenance}\n"
-        f"Size/structure: {size}; columns: {columns}; labels: {class_counts}\n"
-        f"Domain: {config.data.domain}\n"
-        f"Suitability: CSV text and label columns support the configured classification baseline.\n"
-        f"Known challenges: {challenges}"
+        f"Source: {config.data.source} {config.data.provenance} "
+        f"Size: {size}; labels: {class_counts}. "
+        f"Domain: {config.data.domain}. "
+        f"Challenges: {challenges}"
     )
 
 
@@ -199,10 +195,10 @@ def _count_pdf_pages(pdf_path: Path) -> int:
 
 def required_proposal_sections() -> Iterable[str]:
     return (
-        "Project title",
         "NLP task and domain/application area",
         "Motivation and problem statement",
         "Expected final product",
+        "Research questions",
         "Dataset",
         "Team responsibilities",
         "GitHub repository link",

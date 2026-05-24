@@ -23,6 +23,12 @@ dev = [
   "pytest-cov>=4.0",
   "ruff>=0.5"
 ]
+app = [
+  "streamlit>=1.32"
+]
+
+[project.scripts]
+nlp-project = "nlp_project.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

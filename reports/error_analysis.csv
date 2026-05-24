@@ -1,4 +1,41 @@
 id,text,true_label,predicted_label,correct
-5,the dataset documentation makes replacement straightforward.,positive,positive,True
-10,the draft proposal lacks the final github repository link.,negative,negative,True
-11,the team responsibilities are not yet personalized.,negative,positive,False
+88,office hours were scheduled at impossible times for working students.,negative,negative,True
+41,the instructor's slides on attention mechanisms were the clearest i have seen.,positive,negative,False
+196,i appreciated how the professor highlighted limitations of every model we studied.,positive,positive,True
+197,the course encouraged a growth mindset and celebrated incremental progress.,positive,positive,True
+74,i felt disengaged because most of the material was theory with no application.,negative,negative,True
+5,the assignments pushed me to learn and the feedback was constructive and timely.,positive,positive,True
+80,several lectures were canceled with little notice and never rescheduled.,negative,negative,True
+156,career advice woven into lectures was thoughtful and genuinely useful.,positive,positive,True
+112,the course gave clear guidance on when classical methods beat deep learning.,positive,positive,True
+177,project rubrics were vague and graders interpreted them differently across teams.,negative,negative,True
+8,grading was fair and the rubrics were transparent from day one.,positive,positive,True
+198,carefully designed problem sets steadily built up my intuition for evaluation metrics.,positive,positive,True
+52,slides were dense walls of text that the professor read directly to us.,negative,negative,True
+28,i improved my python and scikit-learn skills more than i expected to.,positive,negative,False
+182,the frequent reorganization of the syllabus made long-term planning impossible.,negative,positive,False
+65,grading felt arbitrary and similar submissions received very different scores.,negative,negative,True
+122,the professor was responsive to feedback and adjusted the workload mid-semester.,positive,negative,False
+128,lab equipment was unreliable and many sessions lost time to technical issues.,negative,negative,True
+178,many lectures were essentially the same slides reused from previous semesters.,negative,negative,True
+35,the midterm review session covered exactly the right material at the right depth.,positive,positive,True
+147,project topics were restricted in ways that discouraged creativity.,negative,negative,True
+48,this was one of the best electives i have taken at the university.,positive,positive,True
+23,i appreciated how reproducibility was emphasized throughout the labs.,positive,positive,True
+7,the reading list was curated thoughtfully and balanced theory with practical papers.,positive,negative,False
+44,course assignments were aligned tightly with the learning outcomes.,positive,positive,True
+123,i learned how to write a research-style report thanks to the project structure.,positive,positive,True
+12,lab sessions were well structured and the starter notebooks saved a lot of setup time.,positive,positive,True
+175,promised office hour expansions never materialized despite repeated requests.,negative,negative,True
+34,live coding sessions made abstract algorithms feel concrete and approachable.,positive,positive,True
+71,quizzes tested obscure trivia rather than the core ideas of the course.,negative,negative,True
+37,teaching assistants graded promptly and provided very actionable comments.,positive,positive,True
+183,my questions on transformers received answers that contradicted the course slides.,negative,negative,True
+150,overall the course did not live up to what the syllabus had promised.,negative,negative,True
+173,slide animations actively obscured rather than clarified the diagrams beneath them.,negative,positive,False
+136,topics from earlier weeks were rarely revisited which made the exam stressful.,negative,negative,True
+53,assignments were unclear and the grading rubric kept changing mid-stream.,negative,negative,True
+139,i expected hands-on work with transformers but we only saw a single demo.,negative,positive,False
+127,half the lectures consisted of the instructor reading slides verbatim without insight.,negative,negative,True
+33,the error analysis exercise taught me to read confusion matrices critically.,positive,positive,True
+72,the course relied too much on memorization rather than understanding.,negative,negative,True

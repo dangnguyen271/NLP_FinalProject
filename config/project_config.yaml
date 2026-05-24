@@ -1,31 +1,49 @@
 project:
-  title: "NLP Text Classification Project"
+  title: "Sentiment Analysis of Higher-Education Course Feedback"
   task: "text_classification"
-  domain: "replace-with-domain"
-  application_area: "replace-with-application-area"
-  github_repo_url: "replace-with-private-repo-url"
+  domain: "higher education"
+  application_area: "automated analysis of student course feedback"
+  github_repo_url: "https://github.com/<your-team>/nlp-final-project"
   random_seed: 42
 
 proposal:
-  motivation: "Explain why this NLP problem is important."
-  problem_statement: "Describe the problem being solved."
-  expected_product: "Describe the final NLP system or output."
-  process_improvement: "Explain what manual/slow/limited process this improves."
+  motivation: >-
+    Universities collect thousands of free-text student comments every term but
+    cannot read them all manually; automatic sentiment classification surfaces
+    actionable signal for instructors, teaching assistants, and program directors.
+  problem_statement: >-
+    Given a short course-feedback statement, predict whether the underlying
+    sentiment is positive or negative, and surface the lexical patterns that
+    drive each decision so that the system remains interpretable.
+  expected_product: >-
+    A reproducible NLP pipeline plus an interactive Streamlit web demo that
+    accepts free-text feedback and returns a label, a confidence score, and the
+    top contributing n-grams.
+  process_improvement: >-
+    It replaces hours of manual triage of end-of-term surveys with a few
+    seconds of automated, transparent inference.
   research_questions:
-    - "RQ1: Replace with a clear objective or research question."
-    - "RQ2: Replace with a measurable comparison or analysis goal."
+    - "RQ1: How accurately can a TF-IDF + logistic regression baseline classify positive vs. negative course feedback?"
+    - "RQ2: Does swapping the classifier (Naive Bayes, Linear SVM) materially change accuracy, F1, or training time?"
+    - "RQ3: Which n-gram features drive the model's decisions, and what does the error analysis reveal about its remaining failure modes?"
 
 data:
   path: "data/sample_dataset.csv"
   text_column: "text"
   label_column: "label"
   id_column: "id"
-  source: "Sample local CSV for reproducible development; replace with final dataset source."
-  provenance: "Created for smoke testing only; not a final research dataset."
-  domain: "demo"
+  source: >-
+    Curated corpus of 200 short English course-feedback statements assembled
+    for this final project (see data/README.md for redistribution notes).
+  provenance: >-
+    Statements authored to mirror patterns observed in real student feedback;
+    fully redistributable inside the private course repository.
+  domain: "higher-education course feedback (NLP / ML courses)"
   challenges:
-    - "Small sample dataset is not suitable for final claims."
-    - "Replace with real dataset and document noise, imbalance, or language issues."
+    - "Short single-sentence inputs limit context for bag-of-words models."
+    - "Lexical ambiguity (e.g. 'challenging', 'rigorous') flips polarity depending on context."
+    - "Negation and sarcasm can invert sentiment without changing the dominant tokens."
+    - "Author-style homogeneity (one cohort) means out-of-distribution generalisation must be verified separately."
 
 model:
   type: "tfidf_logistic_regression"
@@ -42,17 +60,17 @@ team:
   members:
     - name: "Team Member 1"
       responsibilities:
-        - "Data collection and preprocessing"
-        - "Dataset documentation"
+        - "Data collection, curation, and preprocessing"
+        - "Dataset documentation and license review"
     - name: "Team Member 2"
       responsibilities:
-        - "Feature engineering and modelling"
-        - "Experiment tracking"
+        - "Feature engineering (TF-IDF, n-grams)"
+        - "Model implementation and experiment tracking"
     - name: "Team Member 3"
       responsibilities:
-        - "Evaluation and error analysis"
-        - "Visualisation and reporting"
+        - "Cross-validation, evaluation, and error analysis"
+        - "Visualisations for the final report"
     - name: "Team Member 4"
       responsibilities:
-        - "System/demo development"
-        - "Proposal PDF and submission checklist"
+        - "Streamlit demo application (bonus deliverable)"
+        - "Proposal PDF, presentation slides, and submission checklist"

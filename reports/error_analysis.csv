@@ -1,0 +1,4 @@
+id,text,true_label,predicted_label,correct
+5,the dataset documentation makes replacement straightforward.,positive,positive,True
+10,the draft proposal lacks the final github repository link.,negative,negative,True
+11,the team responsibilities are not yet personalized.,negative,positive,False

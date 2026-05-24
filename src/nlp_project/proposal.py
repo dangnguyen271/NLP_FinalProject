@@ -1,3 +1,5 @@
+"""Proposal markdown + 1-page PDF for the NewsDigest project."""
+
 from __future__ import annotations
 
 from html import escape
@@ -83,7 +85,7 @@ def render_proposal_pdf(
 
     markdown_text = markdown_path.read_text(encoding="utf-8")
     word_count = len(markdown_text.split())
-    if word_count > 700:
+    if word_count > 750:
         print(
             "Warning: proposal.md is likely too long for one page. "
             "Shorten config text before final PDF submission."
@@ -155,20 +157,18 @@ def _dataset_description(config: AppConfig) -> str:
     try:
         df = load_dataset(config)
         summary = validate_dataset(df, config)
-        class_counts = ", ".join(
-            f"{label}: {count}" for label, count in summary.class_counts.items()
+        size = (
+            f"{summary.rows} article-summary pairs; "
+            f"article mean {summary.article_lengths['mean']:.0f} tokens, "
+            f"summary mean {summary.summary_lengths['mean']:.0f} tokens"
         )
-        size = f"{summary.rows} rows, {len(summary.columns)} columns"
-        columns = ", ".join(summary.columns)
     except DataValidationError as exc:
         size = f"Configured dataset could not be validated yet: {exc}"
-        columns = "Update after replacing or fixing the dataset."
-        class_counts = "Update after validation."
 
     challenges = "; ".join(config.data.challenges)
     return (
         f"Source: {config.data.source} {config.data.provenance} "
-        f"Size: {size}; labels: {class_counts}. "
+        f"Size: {size}. "
         f"Domain: {config.data.domain}. "
         f"Challenges: {challenges}"
     )

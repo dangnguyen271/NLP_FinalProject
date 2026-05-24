@@ -11,19 +11,17 @@ def test_generates_required_proposal_sections(write_config, tmp_path):
 
     for section in required_proposal_sections():
         assert f"## {section}" in text
-    assert "https://github.com/example/private-nlp-project" in text
+    assert "https://github.com/example/newsdigest" in text
     assert "drelhaj" in text
     assert "whistle-hikhi" in text
 
 
 def test_data_readme_contains_assignment_required_sections(repo_root):
     text = (repo_root / "data" / "README.md").read_text(encoding="utf-8")
-
     for heading in (
         "# Dataset Description",
-        "## Source and provenance",
-        "## Size and structure",
-        "## Domain",
+        "## Schema",
+        "## Size and structure of the bundled sample",
         "## Suitability for the NLP task",
         "## Known challenges",
         "## Replacement instructions",

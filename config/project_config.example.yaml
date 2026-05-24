@@ -1,58 +1,87 @@
 project:
-  title: "NLP Text Classification Project"
-  task: "text_classification"
-  domain: "replace-with-domain"
-  application_area: "replace-with-application-area"
-  github_repo_url: "replace-with-private-repo-url"
+  title: "NewsDigest: News Collection and Automatic Summarisation"
+  task: "text_summarization"
+  domain: "digital news media"
+  application_area: "automatic single-document summarisation of English news articles"
+  github_repo_url: "https://github.com/thaibahung/NLP-Project"
   random_seed: 42
 
 proposal:
-  motivation: "Explain why this NLP problem is important."
-  problem_statement: "Describe the problem being solved."
-  expected_product: "Describe the final NLP system or output."
-  process_improvement: "Explain what manual/slow/limited process this improves."
+  motivation: >-
+    Digital news volume makes manual scanning infeasible; readers spend
+    significant time finding the most relevant information.
+  problem_statement: >-
+    Given a single English news article, produce a short summary that is
+    concise, readable, and faithful to the source.
+  expected_product: >-
+    A prototype that accepts an article or news URL and returns a generated
+    summary, with a comparison of methods and an evaluation of quality.
+  process_improvement: >-
+    It reduces the time required to read full-length articles.
   research_questions:
-    - "RQ1: Replace with a clear objective or research question."
-    - "RQ2: Replace with a measurable comparison or analysis goal."
+    - "RQ1: How effectively can an NLP system summarise newspaper articles concisely and informatively?"
+    - "RQ2: Does BART outperform extractive baselines (Lead-3, TextRank) in ROUGE on CNN/DailyMail and XSum?"
+    - "RQ3: Which article characteristics drive summary-quality differences between methods?"
 
 data:
-  path: "data/sample_dataset.csv"
-  text_column: "text"
-  label_column: "label"
+  path: "data/news_sample.csv"
+  text_column: "article"
+  summary_column: "highlights"
   id_column: "id"
-  source: "Sample local CSV for reproducible development; replace with final dataset source."
-  provenance: "Created for smoke testing only; not a final research dataset."
-  domain: "demo"
+  source_column: "source"
+  source: >-
+    Bundled sample of 24 article-highlight pairs for offline tests; full
+    CNN/DailyMail and XSum are fetched via scripts/fetch_datasets.py.
+  provenance: >-
+    Bundled rows are author-written; full datasets come from the HF hub.
+  domain: "English digital news articles"
   challenges:
-    - "Small sample dataset is not suitable for final claims."
-    - "Replace with real dataset and document noise, imbalance, or language issues."
+    - "Long articles exceed BART's 1024-token cap."
+    - "Webpage noise (HTML, ads) must be removed before summarisation."
+    - "Near-duplicate articles bias ROUGE if not deduplicated."
+    - "Article length varies widely across outlets."
 
 model:
-  type: "tfidf_logistic_regression"
-  test_size: 0.2
-  max_features: 5000
-  ngram_range: [1, 2]
-  class_weight: "balanced"
-  artifact_path: "artifacts/model.joblib"
+  baseline: "lead_3"
+  extractive: "textrank"
+  abstractive: "facebook/bart-large-cnn"
+  max_input_tokens: 1024
+  min_summary_tokens: 40
+  max_summary_tokens: 130
+  num_sentences_extractive: 3
+  artifact_dir: "artifacts"
+  use_abstractive: false
+
+evaluation:
+  rouge_variants: ["rouge1", "rouge2", "rougeL", "rougeLsum"]
+  max_examples: 50
+
+scrape:
+  user_agent: "NewsDigest/0.1 (academic project; contact: 22hieu.nh@vinuni.edu.vn)"
+  request_timeout_seconds: 15
 
 reports:
   directory: "reports"
 
 team:
   members:
-    - name: "Team Member 1"
+    - name: "Nguyen Hoang Hieu (Ethan)"
+      email: "22hieu.nh@vinuni.edu.vn"
       responsibilities:
-        - "Data collection and preprocessing"
-        - "Dataset documentation"
-    - name: "Team Member 2"
+        - "Data collection, web scraping, and dataset organisation"
+        - "Hugging Face dataset fetch scripts"
+    - name: "Thai Ba Hung"
+      email: "22hung.tb@vinuni.edu.vn"
       responsibilities:
-        - "Feature engineering and modelling"
-        - "Experiment tracking"
-    - name: "Team Member 3"
+        - "Text cleaning and preprocessing (HTML, deduplication, sentence segmentation)"
+        - "Exploratory data analysis and length / vocabulary statistics"
+    - name: "Nguyen Quoc Dang"
+      email: "22dang.nq@vinuni.edu.vn"
       responsibilities:
-        - "Evaluation and error analysis"
-        - "Visualisation and reporting"
-    - name: "Team Member 4"
+        - "Summarisation modelling (Lead-3, TextRank, BART)"
+        - "Hyperparameter sweeps and ablations"
+    - name: "Le Nguyen Gia Binh"
+      email: "22binh.lng@vinuni.edu.vn"
       responsibilities:
-        - "System/demo development"
-        - "Proposal PDF and submission checklist"
+        - "ROUGE evaluation, visualisation, and qualitative review"
+        - "System integration, Streamlit prototype, and final report preparation"

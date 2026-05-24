@@ -1,3 +1,5 @@
+"""Typed YAML configuration loader for the NewsDigest summarisation project."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,8 +46,9 @@ class ProposalConfig:
 class DataConfig:
     path: Path
     text_column: str
-    label_column: str
+    summary_column: str
     id_column: str | None
+    source_column: str | None
     source: str
     provenance: str
     domain: str
@@ -54,17 +57,33 @@ class DataConfig:
 
 @dataclass(frozen=True)
 class ModelConfig:
-    type: str
-    test_size: float
-    max_features: int
-    ngram_range: tuple[int, int]
-    class_weight: str | None
-    artifact_path: Path
+    baseline: str
+    extractive: str
+    abstractive: str
+    max_input_tokens: int
+    min_summary_tokens: int
+    max_summary_tokens: int
+    num_sentences_extractive: int
+    artifact_dir: Path
+    use_abstractive: bool
+
+
+@dataclass(frozen=True)
+class EvaluationConfig:
+    rouge_variants: tuple[str, ...]
+    max_examples: int
+
+
+@dataclass(frozen=True)
+class ScrapeConfig:
+    user_agent: str
+    request_timeout_seconds: int
 
 
 @dataclass(frozen=True)
 class TeamMember:
     name: str
+    email: str
     responsibilities: tuple[str, ...]
 
 
@@ -81,13 +100,13 @@ class AppConfig:
     proposal: ProposalConfig
     data: DataConfig
     model: ModelConfig
+    evaluation: EvaluationConfig
+    scrape: ScrapeConfig
     team: TeamConfig
     reports_dir: Path
 
 
 def find_repo_root(start: Path | None = None) -> Path:
-    """Find the repository root using common project markers."""
-
     current = (start or Path.cwd()).resolve()
     for candidate in (current, *current.parents):
         if (candidate / "pyproject.toml").exists() or (candidate / "AGENTS.md").exists():
@@ -98,8 +117,6 @@ def find_repo_root(start: Path | None = None) -> Path:
 
 
 def ensure_default_config(config_path: Path | str = DEFAULT_CONFIG_PATH) -> Path:
-    """Create config/project_config.yaml from the example when it is absent."""
-
     path = Path(config_path)
     if not path.is_absolute():
         path = (Path.cwd() / path).resolve()
@@ -121,25 +138,25 @@ def load_config(
     *,
     warn_placeholders: bool = True,
 ) -> AppConfig:
-    """Load and validate project configuration."""
-
     path = ensure_default_config(config_path)
     repo_root = find_repo_root(path.parent)
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
         raise ConfigError("Configuration must be a YAML mapping.")
 
-    missing_sections = [
-        section for section in ("project", "proposal", "data", "model", "team") if section not in raw
-    ]
-    if missing_sections:
-        joined = ", ".join(missing_sections)
-        raise ConfigError(f"Missing required top-level config section(s): {joined}")
+    required = ("project", "proposal", "data", "model", "team")
+    missing = [section for section in required if section not in raw]
+    if missing:
+        raise ConfigError(
+            f"Missing required top-level config section(s): {', '.join(missing)}"
+        )
 
     project_raw = _mapping(raw["project"], "project")
     proposal_raw = _mapping(raw["proposal"], "proposal")
     data_raw = _mapping(raw["data"], "data")
     model_raw = _mapping(raw["model"], "model")
+    eval_raw = _mapping(raw.get("evaluation", {}), "evaluation")
+    scrape_raw = _mapping(raw.get("scrape", {}), "scrape")
     team_raw = _mapping(raw["team"], "team")
     reports_raw = _mapping(raw.get("reports", {}), "reports")
 
@@ -167,36 +184,44 @@ def load_config(
     data = DataConfig(
         path=_normalize_path(_required_str(data_raw, "path", "data"), repo_root),
         text_column=_required_str(data_raw, "text_column", "data"),
-        label_column=_required_str(data_raw, "label_column", "data"),
+        summary_column=_required_str(data_raw, "summary_column", "data"),
         id_column=_optional_str(data_raw.get("id_column")),
+        source_column=_optional_str(data_raw.get("source_column")),
         source=_required_str(data_raw, "source", "data"),
         provenance=_required_str(data_raw, "provenance", "data"),
         domain=_required_str(data_raw, "domain", "data"),
         challenges=_required_str_tuple(data_raw, "challenges", "data"),
     )
 
-    ngram_range = _required_int_tuple(model_raw, "ngram_range", "model", length=2)
-    if ngram_range[0] < 1 or ngram_range[1] < ngram_range[0]:
-        raise ConfigError("model.ngram_range must be a valid [min_n, max_n] pair.")
-
-    test_size = _required_float(model_raw, "test_size", "model")
-    if not 0 < test_size < 1:
-        raise ConfigError("model.test_size must be between 0 and 1.")
-
-    class_weight = _optional_str(model_raw.get("class_weight"))
-    if class_weight is not None and class_weight.lower() in {"none", "null"}:
-        class_weight = None
-
     model = ModelConfig(
-        type=_required_str(model_raw, "type", "model"),
-        test_size=test_size,
-        max_features=_required_int(model_raw, "max_features", "model"),
-        ngram_range=ngram_range,
-        class_weight=class_weight,
-        artifact_path=_normalize_path(model_raw.get("artifact_path", "artifacts/model.joblib"), repo_root),
+        baseline=_required_str(model_raw, "baseline", "model"),
+        extractive=_required_str(model_raw, "extractive", "model"),
+        abstractive=_required_str(model_raw, "abstractive", "model"),
+        max_input_tokens=_required_int(model_raw, "max_input_tokens", "model"),
+        min_summary_tokens=_required_int(model_raw, "min_summary_tokens", "model"),
+        max_summary_tokens=_required_int(model_raw, "max_summary_tokens", "model"),
+        num_sentences_extractive=_required_int(
+            model_raw, "num_sentences_extractive", "model"
+        ),
+        artifact_dir=_normalize_path(model_raw.get("artifact_dir", "artifacts"), repo_root),
+        use_abstractive=bool(model_raw.get("use_abstractive", False)),
     )
-    if model.max_features <= 0:
-        raise ConfigError("model.max_features must be positive.")
+
+    evaluation = EvaluationConfig(
+        rouge_variants=_required_str_tuple(
+            eval_raw or {"rouge_variants": ["rouge1", "rouge2", "rougeL"]},
+            "rouge_variants",
+            "evaluation",
+        )
+        if eval_raw.get("rouge_variants")
+        else ("rouge1", "rouge2", "rougeL", "rougeLsum"),
+        max_examples=int(eval_raw.get("max_examples", 50)),
+    )
+
+    scrape = ScrapeConfig(
+        user_agent=str(scrape_raw.get("user_agent", "NewsDigest/0.1")),
+        request_timeout_seconds=int(scrape_raw.get("request_timeout_seconds", 15)),
+    )
 
     team = TeamConfig(members=_parse_team_members(team_raw))
     reports_dir = _normalize_path(reports_raw.get("directory", "reports"), repo_root)
@@ -208,6 +233,8 @@ def load_config(
         proposal=proposal,
         data=data,
         model=model,
+        evaluation=evaluation,
+        scrape=scrape,
         team=team,
         reports_dir=reports_dir,
     )
@@ -219,6 +246,8 @@ def load_config(
 
 
 def _mapping(value: Any, section: str) -> dict[str, Any]:
+    if value is None:
+        return {}
     if not isinstance(value, dict):
         raise ConfigError(f"{section} must be a mapping.")
     return value
@@ -248,16 +277,6 @@ def _required_int(raw: dict[str, Any], key: str, section: str) -> int:
         raise ConfigError(f"{section}.{key} must be an integer.") from exc
 
 
-def _required_float(raw: dict[str, Any], key: str, section: str) -> float:
-    value = raw.get(key)
-    if value is None:
-        raise ConfigError(f"Missing required config value: {section}.{key}")
-    try:
-        return float(value)
-    except (TypeError, ValueError) as exc:
-        raise ConfigError(f"{section}.{key} must be a number.") from exc
-
-
 def _required_str_tuple(raw: dict[str, Any], key: str, section: str) -> tuple[str, ...]:
     value = raw.get(key)
     if not isinstance(value, list) or not value:
@@ -266,18 +285,6 @@ def _required_str_tuple(raw: dict[str, Any], key: str, section: str) -> tuple[st
     if not result:
         raise ConfigError(f"{section}.{key} must contain at least one non-empty value.")
     return result
-
-
-def _required_int_tuple(
-    raw: dict[str, Any], key: str, section: str, *, length: int
-) -> tuple[int, ...]:
-    value = raw.get(key)
-    if not isinstance(value, list) or len(value) != length:
-        raise ConfigError(f"{section}.{key} must be a list with {length} integers.")
-    try:
-        return tuple(int(item) for item in value)
-    except (TypeError, ValueError) as exc:
-        raise ConfigError(f"{section}.{key} must contain integers.") from exc
 
 
 def _parse_team_members(team_raw: dict[str, Any]) -> tuple[TeamMember, ...]:
@@ -291,6 +298,7 @@ def _parse_team_members(team_raw: dict[str, Any]) -> tuple[TeamMember, ...]:
         members.append(
             TeamMember(
                 name=_required_str(member, "name", f"team.members[{index}]"),
+                email=str(member.get("email", "")).strip(),
                 responsibilities=_required_str_tuple(
                     member, "responsibilities", f"team.members[{index}]"
                 ),
@@ -323,13 +331,9 @@ def _warn_for_placeholders(raw: dict[str, Any]) -> None:
 def _iter_placeholder_paths(value: Any, prefix: str = "") -> list[str]:
     markers = (
         "replace-with",
-        "Team Member",
-        "Explain ",
-        "Describe ",
-        "RQ1: Replace",
-        "RQ2: Replace",
-        "not a final research dataset",
-        "sample dataset",
+        "TODO",
+        "PLACEHOLDER",
+        "<your-",
     )
     matches: list[str] = []
     if isinstance(value, dict):

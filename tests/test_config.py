@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from nlp_project.config import ConfigError, PlaceholderConfigWarning, load_config
+from nlp_project.config import ConfigError, load_config
 
 
 def test_loads_example_config(repo_root):
-    with pytest.warns(PlaceholderConfigWarning):
-        config = load_config(repo_root / "config" / "project_config.example.yaml")
+    config = load_config(
+        repo_root / "config" / "project_config.example.yaml", warn_placeholders=False
+    )
 
-    assert config.project.title == "NLP Text Classification Project"
-    assert config.project.task == "text_classification"
-    assert config.data.text_column == "text"
-    assert config.model.ngram_range == (1, 2)
-    assert config.team.members
+    assert config.project.task == "text_summarization"
+    assert config.project.title.startswith("NewsDigest")
+    assert config.data.text_column == "article"
+    assert config.data.summary_column == "highlights"
+    assert len(config.team.members) == 4
 
 
 def test_required_top_level_sections_are_validated(tmp_path):
@@ -24,10 +25,13 @@ def test_required_top_level_sections_are_validated(tmp_path):
         load_config(bad_config, warn_placeholders=False)
 
 
-def test_placeholder_warnings_do_not_crash(repo_root):
-    with pytest.warns(PlaceholderConfigWarning, match="placeholder"):
-        config = load_config(repo_root / "config" / "project_config.yaml")
-
-    # Team member names remain placeholders until the real team fills them in;
-    # that is the placeholder marker the warning relies on.
-    assert any("Team Member" in member.name for member in config.team.members)
+def test_default_config_has_real_team_names(repo_root):
+    config = load_config(
+        repo_root / "config" / "project_config.yaml", warn_placeholders=False
+    )
+    names = [member.name for member in config.team.members]
+    # Team names from the proposal PDF should already be filled in.
+    assert "Nguyen Hoang Hieu (Ethan)" in names
+    assert "Thai Ba Hung" in names
+    assert "Nguyen Quoc Dang" in names
+    assert "Le Nguyen Gia Binh" in names

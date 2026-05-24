@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nlp-project"
+name = "newsdigest"
 version = "0.1.0"
-description = "Reproducible NLP project scaffold for COMP4020/COMP5040"
+description = "NewsDigest: news collection and automatic summarisation (COMP4020 final project)"
 requires-python = ">=3.11"
 dependencies = [
   "pandas>=2.0",
@@ -14,7 +14,13 @@ dependencies = [
   "joblib>=1.3",
   "PyYAML>=6.0",
   "matplotlib>=3.7",
-  "reportlab>=4.0"
+  "reportlab>=4.0",
+  "beautifulsoup4>=4.12",
+  "lxml>=5.0",
+  "requests>=2.31",
+  "networkx>=3.0",
+  "nltk>=3.8",
+  "rouge-score>=0.1.2"
 ]
 
 [project.optional-dependencies]
@@ -23,12 +29,20 @@ dev = [
   "pytest-cov>=4.0",
   "ruff>=0.5"
 ]
+transformer = [
+  "transformers>=4.40",
+  "torch>=2.0",
+  "sentencepiece>=0.2"
+]
+data = [
+  "datasets>=2.18"
+]
 app = [
   "streamlit>=1.32"
 ]
 
 [project.scripts]
-nlp-project = "nlp_project.cli:main"
+newsdigest = "nlp_project.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

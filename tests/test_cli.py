@@ -1,46 +1,52 @@
 from __future__ import annotations
 
-import os
+from pathlib import Path
 import subprocess
 import sys
 
 
-def test_cli_validate_train_evaluate_and_predict(write_config, repo_root):
-    config_path = write_config()
-    env = os.environ.copy()
-    env["PYTHONPATH"] = f"{repo_root / 'src'}{os.pathsep}{env.get('PYTHONPATH', '')}"
-
-    validate = _run_cli(repo_root, env, "validate-data", "--config", str(config_path))
-    assert validate.returncode == 0, validate.stderr
-    assert "Validated" in validate.stdout
-
-    train = _run_cli(repo_root, env, "train", "--config", str(config_path))
-    assert train.returncode == 0, train.stderr
-    assert "Model written" in train.stdout
-
-    evaluate = _run_cli(repo_root, env, "evaluate", "--config", str(config_path))
-    assert evaluate.returncode == 0, evaluate.stderr
-    assert "Metrics written" in evaluate.stdout
-
-    predict = _run_cli(
-        repo_root,
-        env,
-        "predict",
-        "--config",
-        str(config_path),
-        "--text",
-        "This example is useful and clear.",
-    )
-    assert predict.returncode == 0, predict.stderr
-    assert "Predicted label:" in predict.stdout
-
-
-def _run_cli(repo_root, env, *args):
+def _run(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-m", "nlp_project.cli", *args],
-        cwd=repo_root,
-        env=env,
-        text=True,
+        cwd=cwd,
         capture_output=True,
-        check=False,
+        text=True,
+        check=True,
     )
+
+
+def test_cli_validate_data(repo_root, write_config):
+    config_path = write_config()
+    result = _run(["validate-data", "--config", str(config_path)], cwd=repo_root)
+    assert "Validated" in result.stdout
+    assert "Article tokens" in result.stdout
+
+
+def test_cli_summarize_text(repo_root, write_config):
+    config_path = write_config()
+    article = (
+        "The national space agency announced a new earth-observation satellite. "
+        "It will be used for agriculture and disaster response. "
+        "The first launch took place this week."
+    )
+    result = _run(
+        [
+            "summarize",
+            "--config",
+            str(config_path),
+            "--method",
+            "lead_3",
+            "--text",
+            article,
+        ],
+        cwd=repo_root,
+    )
+    assert "Method: lead_3" in result.stdout
+    assert "satellite" in result.stdout
+
+
+def test_cli_evaluate(repo_root, write_config):
+    config_path = write_config()
+    result = _run(["evaluate", "--config", str(config_path)], cwd=repo_root)
+    assert "lead_3" in result.stdout
+    assert "textrank" in result.stdout

@@ -1,76 +1,87 @@
 project:
-  title: "Sentiment Analysis of Higher-Education Course Feedback"
-  task: "text_classification"
-  domain: "higher education"
-  application_area: "automated analysis of student course feedback"
-  github_repo_url: "https://github.com/<your-team>/nlp-final-project"
+  title: "NewsDigest: News Collection and Automatic Summarisation"
+  task: "text_summarization"
+  domain: "digital news media"
+  application_area: "automatic single-document summarisation of English news articles"
+  github_repo_url: "https://github.com/thaibahung/NLP-Project"
   random_seed: 42
 
 proposal:
   motivation: >-
-    Universities collect thousands of free-text student comments every term but
-    cannot read them all manually; automatic sentiment classification surfaces
-    actionable signal for instructors, teaching assistants, and program directors.
+    Digital news volume makes manual scanning infeasible; readers spend
+    significant time finding the most relevant information.
   problem_statement: >-
-    Given a short course-feedback statement, predict whether the underlying
-    sentiment is positive or negative, and surface the lexical patterns that
-    drive each decision so that the system remains interpretable.
+    Given a single English news article, produce a short summary that is
+    concise, readable, and faithful to the source.
   expected_product: >-
-    A reproducible NLP pipeline plus an interactive Streamlit web demo that
-    accepts free-text feedback and returns a label, a confidence score, and the
-    top contributing n-grams.
+    A prototype that accepts an article or news URL and returns a generated
+    summary, with a comparison of methods and an evaluation of quality.
   process_improvement: >-
-    It replaces hours of manual triage of end-of-term surveys with a few
-    seconds of automated, transparent inference.
+    It reduces the time required to read full-length articles.
   research_questions:
-    - "RQ1: How accurately can a TF-IDF + logistic regression baseline classify positive vs. negative course feedback?"
-    - "RQ2: Does swapping the classifier (Naive Bayes, Linear SVM) materially change accuracy, F1, or training time?"
-    - "RQ3: Which n-gram features drive the model's decisions, and what does the error analysis reveal about its remaining failure modes?"
+    - "RQ1: How effectively can an NLP system summarise newspaper articles concisely and informatively?"
+    - "RQ2: Does BART outperform extractive baselines (Lead-3, TextRank) in ROUGE on CNN/DailyMail and XSum?"
+    - "RQ3: Which article characteristics drive summary-quality differences between methods?"
 
 data:
-  path: "data/sample_dataset.csv"
-  text_column: "text"
-  label_column: "label"
+  path: "data/news_sample.csv"
+  text_column: "article"
+  summary_column: "highlights"
   id_column: "id"
+  source_column: "source"
   source: >-
-    Curated corpus of 200 short English course-feedback statements assembled
-    for this final project (see data/README.md for redistribution notes).
+    Bundled sample of 24 article-highlight pairs for offline tests; full
+    CNN/DailyMail and XSum are fetched via scripts/fetch_datasets.py.
   provenance: >-
-    Statements authored to mirror patterns observed in real student feedback;
-    fully redistributable inside the private course repository.
-  domain: "higher-education course feedback (NLP / ML courses)"
+    Bundled rows are author-written; full datasets come from the HF hub.
+  domain: "English digital news articles"
   challenges:
-    - "Short single-sentence inputs limit context for bag-of-words models."
-    - "Lexical ambiguity (e.g. 'challenging', 'rigorous') flips polarity depending on context."
-    - "Negation and sarcasm can invert sentiment without changing the dominant tokens."
-    - "Author-style homogeneity (one cohort) means out-of-distribution generalisation must be verified separately."
+    - "Long articles exceed BART's 1024-token cap."
+    - "Webpage noise (HTML, ads) must be removed before summarisation."
+    - "Near-duplicate articles bias ROUGE if not deduplicated."
+    - "Article length varies widely across outlets."
 
 model:
-  type: "tfidf_logistic_regression"
-  test_size: 0.2
-  max_features: 5000
-  ngram_range: [1, 2]
-  class_weight: "balanced"
-  artifact_path: "artifacts/model.joblib"
+  baseline: "lead_3"
+  extractive: "textrank"
+  abstractive: "facebook/bart-large-cnn"
+  max_input_tokens: 1024
+  min_summary_tokens: 40
+  max_summary_tokens: 130
+  num_sentences_extractive: 3
+  artifact_dir: "artifacts"
+  use_abstractive: false
+
+evaluation:
+  rouge_variants: ["rouge1", "rouge2", "rougeL", "rougeLsum"]
+  max_examples: 50
+
+scrape:
+  user_agent: "NewsDigest/0.1 (academic project; contact: 22hieu.nh@vinuni.edu.vn)"
+  request_timeout_seconds: 15
 
 reports:
   directory: "reports"
 
 team:
   members:
-    - name: "Team Member 1"
+    - name: "Nguyen Hoang Hieu (Ethan)"
+      email: "22hieu.nh@vinuni.edu.vn"
       responsibilities:
-        - "Data collection, curation, and preprocessing"
-        - "Dataset documentation and license review"
-    - name: "Team Member 2"
+        - "Data collection, web scraping, and dataset organisation"
+        - "Hugging Face dataset fetch scripts"
+    - name: "Thai Ba Hung"
+      email: "22hung.tb@vinuni.edu.vn"
       responsibilities:
-        - "Feature engineering (TF-IDF, n-grams)"
-        - "Model implementation and experiment tracking"
-    - name: "Team Member 3"
+        - "Text cleaning and preprocessing (HTML, deduplication, sentence segmentation)"
+        - "Exploratory data analysis and length / vocabulary statistics"
+    - name: "Nguyen Quoc Dang"
+      email: "22dang.nq@vinuni.edu.vn"
       responsibilities:
-        - "Cross-validation, evaluation, and error analysis"
-        - "Visualisations for the final report"
-    - name: "Team Member 4"
+        - "Summarisation modelling (Lead-3, TextRank, BART)"
+        - "Hyperparameter sweeps and ablations"
+    - name: "Le Nguyen Gia Binh"
+      email: "22binh.lng@vinuni.edu.vn"
       responsibilities:
-        - "Streamlit demo application (bonus deliverable)"
-        - "Proposal PDF, presentation slides, and submission checklist"
+        - "ROUGE evaluation, visualisation, and qualitative review"
+        - "System integration, Streamlit prototype, and final report preparation"

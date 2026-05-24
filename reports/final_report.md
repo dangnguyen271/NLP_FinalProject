@@ -1,186 +1,302 @@
-# Sentiment Analysis of Higher-Education Course Feedback
+# NewsDigest: News Collection and Automatic Summarisation
 
-**COMP4020 / COMP5040 — NLP Final Project Report (Phase 2)**
+**COMP4020 — NLP Final Project Report (Phase 2)**
 
-Team: Team Member 1, Team Member 2, Team Member 3, Team Member 4 *(replace with real names before submission)*
-
-GitHub: `https://github.com/<your-team>/nlp-final-project`
+Team: Nguyen Hoang Hieu (Ethan), Thai Ba Hung, Nguyen Quoc Dang, Le Nguyen Gia Binh
+Emails: 22hieu.nh@vinuni.edu.vn · 22hung.tb@vinuni.edu.vn · 22dang.nq@vinuni.edu.vn · 22binh.lng@vinuni.edu.vn
+GitHub: [dangnguyen271/NLP_FinalProject](https://github.com/dangnguyen271/NLP_FinalProject)
 
 ---
 
 ## 1. Introduction
 
-Universities collect thousands of free-text student comments at the end of every term — from formal course evaluations, weekly micro-surveys, anonymous comment cards, and discussion-forum reactions. The signal is rich and immediately actionable for instructors, teaching assistants, and program directors, but the volume makes manual reading infeasible. This project builds a reproducible NLP pipeline that classifies short course-feedback statements as **positive** or **negative**, surfaces the lexical patterns driving each decision, and exposes the model through an interactive web demo.
+The growth of digital news has made it increasingly difficult for readers to keep up with current events. News websites publish a large number of articles every day, and many are lengthy or repetitive across sources, so readers spend significant time identifying the most relevant information. NewsDigest is an NLP-based prototype that collects English news articles and automatically generates concise summaries. The main NLP task is **text summarisation**, and the application domain is **digital news media**.
 
-We treat sentiment classification on course feedback as a representative supervised text-classification task. The pipeline follows the canonical NLP workflow — preprocessing, representation, modelling, evaluation — and supports three classifier families behind a single configuration switch. Three research questions guide the work:
+The system is designed as a practical university-level pipeline that combines data collection, preprocessing, summarisation, evaluation, and a small web prototype. Three research questions guide the work:
 
-- **RQ1:** How accurately can a TF-IDF + logistic regression baseline classify positive vs. negative course feedback?
-- **RQ2:** Does swapping the classifier (Multinomial Naive Bayes, Linear SVM) materially change accuracy, macro-F1, or training time?
-- **RQ3:** Which n-gram features drive the model's decisions, and what does the error analysis reveal about its remaining failure modes?
+- **RQ1** — How effectively can an NLP system summarise newspaper articles in a way that is concise, readable, and informative?
+- **RQ2** — Does an abstractive transformer (BART) materially outperform extractive baselines (Lead-3, TextRank) in ROUGE on CNN/DailyMail and XSum?
+- **RQ3** — Which article characteristics (length, source, writing style) drive summary-quality differences between methods?
 
-The dataset is a curated corpus of 200 short English course-feedback statements (100 positive, 100 negative; see `data/README.md`). Each row is a single sentence (5–25 tokens typical) authored to mirror patterns observed in real course evaluations while staying redistributable inside the private course repository. The codebase additionally accepts any CSV with `text`/`label` columns, so the same pipeline can be re-run against IMDB or SST-2 for an external validity check.
+We use three datasets. The **bundled sample** (`data/news_sample.csv`, 24 article-summary pairs) is included in the repository for offline tests and CI. The **CNN/DailyMail v3.0.0** dataset (Hermann et al. 2015; See et al. 2017) is the primary benchmark; **XSum** (Narayan et al. 2018) is used as a secondary benchmark with extreme single-sentence summaries. Both benchmark datasets are fetched on demand by `scripts/fetch_datasets.py` from the Hugging Face Datasets hub. A handful of recent articles are scraped at presentation time from public URLs through the `scrape` CLI command.
 
-Three challenges shape the methodology. **Short context:** single-sentence inputs limit signal for bag-of-words models. **Lexical ambiguity:** tokens like *challenging* or *rigorous* can be either positive or negative depending on framing. **Negation and sarcasm:** several rows include polarity flips (*"I did not learn much"*) that a pure unigram model cannot resolve. We address the first two by allowing the model to see unigram + bigram features and by interpreting the resulting coefficients; the third we examine qualitatively in the error analysis.
+Three challenges shape the methodology. **Long-form inputs:** CNN/DailyMail articles regularly exceed BART's 1024-token cap, requiring truncation or chunking. **Webpage noise:** scraped articles include HTML, ads, share buttons, and "read more" boilerplate that must be cleaned. **Style heterogeneity:** CNN, BBC, and blog posts differ in lead structure, average length, and vocabulary.
 
 ## 2. Methodology
 
 ### 2.1 Pipeline overview
 
-The pipeline is implemented under `src/nlp_project/` and ships as a single CLI:
+The pipeline is implemented in `src/nlp_project/` and exposed through one CLI:
 
 ```
 python -m nlp_project.cli run-all --config config/project_config.yaml
 ```
 
-It validates the CSV, deterministically splits 80/20 stratified train/test, trains the configured classifier, evaluates the held-out test set, runs a cross-model benchmark with 5-fold cross-validation, produces five report figures, and regenerates the proposal markdown and PDF. Every stage reads the same YAML config so all experiments share the same random seed (`42`) and identical preprocessing.
+It validates the CSV, splits 75/25 train/test, runs every available summarisation method on the test split, scores ROUGE against the reference summaries, produces five report figures, and regenerates the proposal markdown and PDF.
 
 ### 2.2 Preprocessing
 
-Text is normalised by a `TextNormalizer` scikit-learn transformer (`src/nlp_project/preprocess.py`):
+`nlp_project.preprocess` performs three deterministic steps:
 
-1. Drop Unicode control characters.
-2. Lower-case.
-3. Collapse repeated whitespace to single spaces and strip the ends.
+1. `strip_html` removes `<script>`, `<style>`, `<iframe>`, and other non-content tags using BeautifulSoup (`lxml` parser).
+2. `normalize_article` applies Unicode normalisation (NFKC), drops control characters, strips boilerplate phrases (*"Share this article"*, *"click here to subscribe"*, copyright lines), and collapses whitespace. Crucially, it preserves casing and punctuation — both signals that downstream summarisers rely on for fluency.
+3. `split_sentences` is a lightweight regex sentence splitter that handles common abbreviations (`Dr.`, `U.S.`, `e.g.`) without needing the NLTK punkt download.
 
-We intentionally avoid punctuation removal and stemming because both can erase polarity-bearing tokens (*"didn't"*, *"won't"*). Tokenisation is delegated to `scikit-learn`'s `TfidfVectorizer`, which uses the default word-boundary regex.
+### 2.3 Summarisation methods
 
-### 2.3 Representation
+Three methods share the same input contract:
 
-We use a TF-IDF representation with unigrams and bigrams, capped at `max_features = 5000`, configured in `model.ngram_range = [1, 2]`. This balances coverage of multi-word polarity cues (*"not helpful"*, *"office hours"*) against vocabulary blow-up on a 200-row corpus. Sub-linear TF scaling is left at the scikit-learn default.
+| Method      | Type        | Implementation |
+|-------------|-------------|----------------|
+| `lead_3`    | Extractive  | First three sentences (the strongest single baseline on CNN/DailyMail). |
+| `textrank`  | Extractive  | TF-IDF + cosine-similarity graph + `networkx.pagerank`. |
+| `bart`      | Abstractive | `facebook/bart-large-cnn` via the Hugging Face `summarization` pipeline. |
 
-### 2.4 Models
+BART is loaded lazily and gated behind `model.use_abstractive: true` in the YAML config; it requires the `[transformer]` optional install. The first two work entirely offline.
 
-Three classifier families share the same TF-IDF representation:
+### 2.4 Evaluation protocol
 
-| `model.type`                  | Classifier                  | Notes |
-|-------------------------------|-----------------------------|-------|
-| `tfidf_logistic_regression`   | `LogisticRegression(liblinear)` | Coefficients are directly interpretable; `class_weight="balanced"`. |
-| `tfidf_naive_bayes`           | `MultinomialNB(alpha=1.0)`  | Strong sparse-feature baseline; Laplace smoothing. |
-| `tfidf_linear_svm`            | `LinearSVC(C=1.0)`          | Margin-based linear model; no native probabilities. |
+We score every generated summary against the gold reference using ROUGE-1, ROUGE-2, ROUGE-L, and ROUGE-Lsum (Lin 2004), computed by `rouge-score` with Porter stemming. The pipeline writes:
 
-Switching models requires only a single line edit in `config/project_config.yaml` followed by `python -m nlp_project.cli train`. The `benchmark` command trains all three on the same split and writes a comparison CSV.
+- `reports/rouge_metrics.json` — per-method mean ROUGE scores.
+- `reports/method_summary.csv` — one row per method with ROUGE, mean summary length, mean compression ratio, mean inference time.
+- `reports/qualitative_review.csv` — every test-set row × method with the generated summary, reference, ROUGE breakdown — the working dataset for the qualitative review.
 
-### 2.5 Evaluation protocol
+### 2.5 Reproducibility
 
-We report accuracy and per-class precision, recall, and F1 on the held-out test set (`reports/classification_report.txt`, `reports/metrics.json`), and 5-fold stratified macro-F1 cross-validation on the training split (`reports/benchmark.csv`). Cross-validation reduces sensitivity to the particular 80/20 cut. An error-analysis CSV (`reports/error_analysis.csv`) records every test-set prediction so qualitative review is reproducible.
-
-### 2.6 Reproducibility
-
-Determinism comes from a single `project.random_seed`. The CLI, tests, and Streamlit app all load the same config, so every artefact under `reports/` and `artifacts/` is regenerable with one command. The test suite (`tests/`) covers config loading, data validation, preprocessing, model training, CLI commands, the benchmark, and the proposal generator.
+All randomness is seeded from a single `project.random_seed` value in the YAML config. Every artefact under `reports/` is regenerable from a fresh `git clone` with `python -m nlp_project.cli run-all`. The pytest suite (26 tests) covers config, data, preprocessing, summarisation, evaluation, visualisations, the proposal generator, and the CLI; it runs in ~4 seconds, fully offline.
 
 ## 3. Results
 
-### 3.1 RQ1 — TF-IDF + Logistic Regression baseline
+The numbers below are produced by `python -m nlp_project.cli run-all` on the bundled 24-row sample (18 train / 6 test). When the team runs `scripts/fetch_datasets.py --dataset cnn_dailymail` and points the config at the downloaded CSV, the same command regenerates this section against the canonical benchmark.
 
-On the 40-row held-out test split, the logistic-regression baseline achieves:
+### 3.1 RQ1 — Lead-3 baseline
 
-| Metric         | Value |
-|----------------|-------|
-| Accuracy       | 0.825 |
-| Macro F1       | 0.825 |
-| Weighted F1    | 0.825 |
+On the held-out test split of the bundled sample:
 
-Per-class metrics (test support: 20 positive, 20 negative):
+| Metric       | Value |
+|--------------|------:|
+| ROUGE-1 F1   | 0.359 |
+| ROUGE-2 F1   | 0.121 |
+| ROUGE-L F1   | 0.257 |
+| Mean summary | 69 tokens |
+| Compression  | 82.7% |
 
-| Class    | Precision | Recall | F1   |
-|----------|-----------|--------|------|
-| negative | 0.810     | 0.850  | 0.829 |
-| positive | 0.842     | 0.800  | 0.821 |
+Lead-3 is the most reliable single baseline in news summarisation because news lead paragraphs are *engineered* to be summaries. Even on this small sample, ROUGE-1 ≈ 0.36 is competitive with published TextRank results on CNN/DailyMail. The remaining gap to human references comes from the bundled sample's preference for very short one-sentence highlights, while Lead-3 returns three full sentences.
 
-The model is balanced across classes — both precision and recall stay within ~4 points across positive and negative, a direct consequence of the deliberately balanced corpus plus `class_weight="balanced"`. Figure 1 (`reports/figures/confusion_matrix.png`) shows three positive examples mis-classified as negative and three negatives mis-classified as positive; we discuss representative errors in §3.3.
+### 3.2 RQ2 — Method comparison
 
-### 3.2 RQ2 — Cross-model benchmark
+| Method   | ROUGE-1 | ROUGE-2 | ROUGE-L | Mean tokens | Compression | Inference (s) |
+|----------|--------:|--------:|--------:|------------:|------------:|--------------:|
+| lead_3   |   0.359 |   0.121 |   0.257 |          69 |       82.7% |        ~0.000 |
+| textrank |   0.367 |   0.128 |   0.269 |          69 |       83.0% |         0.007 |
 
-Running `python -m nlp_project.cli benchmark` produces the following on the same train/test split:
+TextRank edges out Lead-3 by ~1 point of ROUGE-1 on the bundled sample. On CNN/DailyMail, published results put `bart-large-cnn` ahead of both extractive baselines by roughly 10-15 points of ROUGE-1 (~0.44 vs. ~0.30), so we expect the gap to widen significantly once BART is enabled. The fact that two extractive methods are this close on the bundled sample is itself informative: it tells us that on short news with a clear lead-paragraph structure, extractive baselines are very hard to beat without a learned model.
 
-| Model                       | Accuracy | Macro F1 | Weighted F1 | 5-fold CV macro-F1 | Train (s) |
-|-----------------------------|---------:|---------:|------------:|-------------------:|----------:|
-| tfidf_logistic_regression   | 0.825    | 0.825    | 0.825       | 0.690 ± 0.074      | ~0.01 |
-| tfidf_naive_bayes           | 0.775    | 0.774    | 0.774       | 0.688 ± 0.067      | ~0.01 |
-| tfidf_linear_svm            | 0.850    | 0.850    | 0.850       | 0.677 ± 0.054      | ~0.01 |
+Inference time is negligible for both extractive methods (sub-10 ms per article). BART, when enabled, takes ~1-3 seconds per article on CPU and is the dominant compute cost in the pipeline.
 
-Three observations are robust across cross-validation folds (see `reports/figures/benchmark.png`):
+### 3.3 RQ3 — Where the methods differ
 
-1. **All three models cluster within ~7 accuracy points.** Linear SVM is best on the held-out test split, logistic regression is second, and Naive Bayes is third. The gap between best and worst on the single test split (0.075) is comparable to the cross-validation standard deviation (~0.07), which means **no model is unambiguously dominant** at this dataset size.
-2. **Training time is negligible for all three.** A 200-row TF-IDF baseline trains in ~10 ms; selecting between them is a quality call, not a compute call.
-3. **Logistic regression is the most operationally useful choice** because it exposes calibrated probabilities and directly interpretable coefficients, both of which the Streamlit demo relies on for confidence scores and the *"Why?"* token-attribution panel.
+Reviewing `reports/qualitative_review.csv` reveals three patterns:
 
-We therefore keep logistic regression as the deployed model while reporting all three to satisfy RQ2 honestly.
+1. **Long articles → identical outputs.** When an article has fewer than four sentences, Lead-3 returns the whole article and TextRank degrades to the same. Compression ratios stay above 80%.
+2. **Multiple-subject articles → TextRank wins.** When the article has multiple subjects (e.g. announcement + follow-up + future plans), TextRank's central-sentence ranking picks the most globally connected sentence, while Lead-3 may miss the most important content by sticking to position one.
+3. **One-sentence references hurt both methods.** XSum-style single-sentence references penalise any multi-sentence extractive output. The qualitative CSV shows several rows where the generated summary is faithful and readable but ROUGE-2 collapses because of length mismatch.
 
-### 3.3 RQ3 — Feature attribution and error analysis
+The compression-ratio plot (`reports/figures/compression_ratio.png`) makes (1) visually obvious: the bars sit near 80% for both extractive methods. The per-example ROUGE-1 distribution plot (`reports/figures/per_example_rouge.png`) shows that the methods are tightly correlated row-by-row, confirming (2) and (3).
 
-Figure 2 (`reports/figures/top_features.png`) plots the 15 strongest n-gram features per class for the logistic-regression model. Top tokens pushing toward **positive** are dominated by enthusiasm and pedagogy signals (*helpful*, *enjoyed*, *clear*, *well organized*, *appreciated*); top tokens pushing toward **negative** are dominated by friction and dissatisfaction signals (*frustrating*, *unclear*, *poorly*, *did not*, *rarely*). The presence of the bigram *"did not"* among the negative-supporting features is encouraging: the model has learned at least one explicit negation cue that a pure unigram bag could not represent.
+### 3.4 Article length distribution
 
-Reviewing `reports/error_analysis.csv` reveals two consistent failure modes:
+The article length histogram (`reports/figures/article_length.png`) shows the bundled sample is tightly concentrated between 60 and 110 tokens. Real CNN/DailyMail articles average ~780 tokens and stress BART's 1024-token cap; we discuss this length mismatch under Limitations.
 
-- **Mixed sentiment in a single sentence** — e.g. *"This class was rigorous yet approachable and I would gladly take it again."* contains *rigorous* (which the model has learned as weakly negative from teaching-style comments) alongside strong positive markers. These statements sit close to the decision boundary.
-- **Indirect negation across token spans** — e.g. *"I learned more from watching online tutorials than from attending lectures."* is negative about the course but contains no individually negative lexical item. A bigram TF-IDF model cannot represent the *more X than Y* construction; a transformer-based model would.
+### 3.5 Descriptive dataset statistics
 
-A learning curve (`reports/figures/learning_curve.png`) shows the training-set macro-F1 plateauing near 1.0 while cross-validation macro-F1 climbs from ~0.59 at 32 training examples to ~0.68 at 160 examples. The widening gap between train and CV curves at small sample counts is consistent with mild overfitting, which is expected for a high-dimensional TF-IDF representation on a small corpus and which more data — not a more complex model — would primarily address.
+The bundled development dataset is deliberately small, but it is balanced enough to
+exercise the whole pipeline and expose length/compression behaviour before switching
+to the larger benchmarks. Validation reports zero duplicated article-summary pairs.
 
-### 3.4 Class and dataset balance
+| Statistic | Article tokens | Reference-summary tokens | Article sentences | Reference compression |
+|---|---:|---:|---:|---:|
+| Count | 24 | 24 | 24 | 24 |
+| Mean | 81.4 | 23.6 | 3.7 | 29.1% |
+| Median | 80.0 | 23.0 | 4.0 | 29.0% |
+| Standard deviation | 8.6 | 3.0 | 0.6 | 3.0 pp |
+| Minimum | 67 | 19 | 3 | 22.9% |
+| 25th percentile | 76.0 | 21.0 | 3.0 | 27.5% |
+| 75th percentile | 83.3 | 25.3 | 4.0 | 30.4% |
+| Maximum | 105 | 31 | 5 | 36.0% |
 
-Figure 3 (`reports/figures/class_distribution.png`) confirms the corpus is balanced 100/100 by construction. We retained `class_weight="balanced"` for the logistic-regression and SVM classifiers anyway, both to remain robust to future data drift and to enable apples-to-apples comparison on imbalanced public datasets.
+The deterministic 75/25 split gives 18 training rows and 6 test rows. The split is
+not materially length-skewed: the training rows average 80.5 article tokens and
+23.4 reference tokens, while the held-out test rows average 84.0 article tokens and
+24.2 reference tokens. Reference compression is also similar across splits
+(29.2% train vs. 28.7% test), so the reported ROUGE scores are not inflated by an
+unusually short or easy test set.
 
-## 4. Pipeline Reflection
+### 3.6 Per-example ROUGE distribution
 
-End-to-end, the NLP workflow we built looks like this:
+Means alone hide a lot of useful behaviour on a six-row test set. The table below
+summarises the per-example distribution in `reports/qualitative_review.csv`.
 
-1. **Data validation** — `nlp_project.data` checks required columns, empty cells, and minimum-class counts; warns on duplicates. This catches the most common dataset-replacement mistakes before training starts.
-2. **Preprocessing** — a deterministic, dependency-free normalisation step that drops control characters, lower-cases, and collapses whitespace.
-3. **Representation** — TF-IDF unigrams + bigrams, capped at 5000 features.
-4. **Modelling** — three interchangeable scikit-learn classifiers, selectable via `model.type` in config.
-5. **Evaluation** — accuracy, macro/weighted F1, per-class precision/recall/F1, plus 5-fold cross-validation and a held-out test set; outputs saved as machine-readable JSON/CSV and human-readable text.
-6. **Visualisation** — confusion matrix, class distribution, top features, learning curve, and a cross-model benchmark chart.
-7. **Deployment** — Streamlit app that loads the same artefact, accepts free-text and CSV input, and explains its predictions with per-token contributions.
+| Method | Metric | Mean | Median | Std. dev. | IQR | Min | Max |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Lead-3 | ROUGE-1 F1 | 0.359 | 0.353 | 0.091 | 0.296-0.432 | 0.242 | 0.472 |
+| Lead-3 | ROUGE-2 F1 | 0.121 | 0.096 | 0.058 | 0.081-0.163 | 0.067 | 0.207 |
+| Lead-3 | ROUGE-L F1 | 0.257 | 0.269 | 0.047 | 0.242-0.278 | 0.176 | 0.315 |
+| TextRank | ROUGE-1 F1 | 0.367 | 0.372 | 0.093 | 0.305-0.432 | 0.242 | 0.484 |
+| TextRank | ROUGE-2 F1 | 0.128 | 0.134 | 0.048 | 0.089-0.166 | 0.067 | 0.180 |
+| TextRank | ROUGE-L F1 | 0.269 | 0.271 | 0.065 | 0.242-0.286 | 0.176 | 0.374 |
 
-Two design decisions paid off repeatedly. **YAML-as-single-source-of-truth** kept the CLI, tests, and demo app in sync — a config change is the only thing required to retrain, re-evaluate, and re-deploy. **Sci-kit-learn `Pipeline`-as-artefact** means the deployed model includes its own preprocessing, removing an entire class of train/serve skew bugs.
+TextRank improves the mean by 0.008 ROUGE-1, 0.006 ROUGE-2, and 0.012 ROUGE-L.
+However, the paired comparison is mixed: TextRank is better on 1 of 6 examples,
+Lead-3 is better on 1 of 6 examples, and the two methods tie on 4 of 6 examples.
+This supports the qualitative observation that both extractive systems often choose
+the same lead-heavy sentences on short news articles.
 
-Things we would do differently with more time include adding a small character-n-gram fall-back vectoriser to better handle typos, and adding a sentence-embedding baseline (e.g. `sentence-transformers/all-MiniLM-L6-v2`) to quantify how much accuracy a non-bag-of-words representation buys on this domain.
+The strongest Lead-3 row is the offshore wind-farm article (`id=17`, ROUGE-1 F1
+0.472); the weakest is the Hanoi-Sydney flight article (`id=9`, ROUGE-1 F1 0.242).
+TextRank's best row is the education-chatbot article (`id=1`, ROUGE-1 F1 0.484),
+where graph centrality selects a sentence closer to the reference than the strict
+lead position.
+
+### 3.7 Precision, recall, and length diagnostics
+
+The extractive methods have much higher recall than precision because they output
+three full sentences while the references are concise one-sentence highlights.
+This is visible in the mean ROUGE component scores:
+
+| Method | ROUGE-1 precision | ROUGE-1 recall | ROUGE-2 precision | ROUGE-2 recall | ROUGE-L precision | ROUGE-L recall |
+|---|---:|---:|---:|---:|---:|---:|
+| Lead-3 | 0.243 | 0.691 | 0.081 | 0.240 | 0.175 | 0.492 |
+| TextRank | 0.252 | 0.697 | 0.087 | 0.249 | 0.185 | 0.508 |
+
+Generated summaries average 68.7 tokens for both methods, compared with 24.2 tokens
+for the test references. As a result, the generated-summary compression ratio is
+about 83%, whereas the gold-reference compression ratio is about 29%. This length
+mismatch explains why recall is strong while precision and ROUGE-2 remain modest:
+the generated summaries usually contain the correct topic but include many extra
+tokens not present in the human highlight.
+
+Runtime remains suitable for an interactive demo. Lead-3 is effectively instant
+(mean runtime below 0.1 ms per article in this run). TextRank averages 13.8 ms per
+article, with a median below 1 ms and one slower row caused by graph construction.
+BART is expected to dominate runtime once enabled, so it should be presented as a
+quality-oriented option rather than the default low-latency mode.
+
+### 3.8 XSum snapshot statistics
+
+The team also fetched a 500-row XSum test snapshot with:
+
+```
+python scripts/fetch_datasets.py --dataset xsum --split test --max-rows 500
+```
+
+This snapshot contains zero empty articles, zero empty references, and zero duplicate
+article-summary pairs. Its length profile is very different from the bundled sample:
+
+| Statistic | XSum article tokens | XSum reference tokens | XSum reference compression |
+|---|---:|---:|---:|
+| Count | 500 | 500 | 500 |
+| Mean | 401.7 | 21.1 | 9.3% |
+| Median | 306.0 | 21.0 | 6.8% |
+| Standard deviation | 304.2 | 5.3 | 8.7 pp |
+| Minimum | 19 | 3 | 0.8% |
+| 25th percentile | 192.8 | 18.0 | 3.8% |
+| 75th percentile | 517.3 | 24.0 | 11.1% |
+| Maximum | 1,743 | 48 | 89.5% |
+
+The XSum snapshot is therefore a harder stress test than the bundled sample: articles
+are roughly five times longer on average, while references stay almost the same
+length. This pushes the target compression from 29% down to 9%, so extractive
+three-sentence methods should be expected to lose precision unless the system adds
+length-aware sentence selection or an abstractive model.
+
+## 4. Pipeline reflection
+
+The end-to-end NLP workflow has six stages:
+
+1. **Data validation** (`nlp_project.data`) — checks required columns, empty cells, summary-longer-than-article corruption; reports article/summary length statistics. Catches the most common dataset-replacement mistakes before training.
+2. **Preprocessing** (`nlp_project.preprocess`) — HTML stripping, Unicode normalisation, boilerplate removal, regex sentence segmentation. Preserves casing and punctuation so downstream summarisers remain fluent.
+3. **Summarisation** (`nlp_project.summarize`) — three interchangeable methods behind one function call. Abstractive BART is loaded lazily and skipped gracefully when the optional dependency is missing.
+4. **Evaluation** (`nlp_project.evaluate`) — ROUGE-1/2/L/Lsum via the `rouge-score` library; per-row qualitative CSV; compression and timing metrics.
+5. **Visualisation** (`nlp_project.visualize`) — ROUGE comparison, article and summary length histograms, compression-ratio bars, per-example ROUGE-1 distribution.
+6. **Deployment** (`nlp_project.app`) — Streamlit demo with three tabs: paste-article, fetch-URL, and ROUGE evaluation refresh.
+
+Two design choices proved decisive. **YAML-as-single-source-of-truth** keeps the CLI, tests, and the Streamlit app perfectly synchronised: one config edit changes the model, the metrics, and the deployed demo in lockstep. **Lazy abstractive loading** means CI runs in seconds on the cheap extractive baselines, while the same code path scales up to BART when a developer flips one flag.
 
 ## 5. Conclusion
 
-We built a reproducible, well-tested NLP pipeline for sentiment classification of higher-education course feedback. A TF-IDF + logistic regression baseline reaches 0.825 accuracy / 0.825 macro-F1 on a 40-row held-out test split, and a Linear SVM under identical preprocessing reaches 0.850 / 0.850. The two are statistically indistinguishable given the corpus size (the test-split gap is within one cross-validation standard deviation), so we deploy the logistic-regression model for its interpretability and calibrated probabilities.
+We built a reproducible English news summarisation pipeline with three interchangeable summarisation methods (Lead-3, TextRank, BART), full ROUGE evaluation, and a Streamlit prototype that accepts pasted articles or public URLs. On the bundled sample, both extractive methods score around 0.36 ROUGE-1 with TextRank edging Lead-3 by ~1 point. With BART enabled and the full CNN/DailyMail dataset fetched, the same pipeline measures abstractive vs. extractive performance directly. Qualitative review identifies three failure modes that further work — chunked long-article inputs, length-aware decoding, and abstractive fine-tuning on XSum — would address.
 
-Feature attribution recovers intuitively meaningful positive cues (*helpful*, *clear*, *well organized*) and negative cues (*frustrating*, *unclear*, *did not*), confirming the model is not exploiting spurious correlations. The two consistent failure modes — mixed-sentiment sentences and cross-span indirect negation — point directly at the next research step: replace bag-of-words with sentence embeddings or a small transformer.
-
-The accompanying interactive Streamlit application (`src/nlp_project/app.py`) wraps the same artefact for free-text input, CSV batch scoring, on-demand metric refresh, and per-token explanation. It is the bonus deliverable and is the form in which a non-technical user (an instructor, an administrator) would actually consume the model.
+The prototype demonstrates how NLP can support faster, more efficient news reading. It is functional, reproducible, and presentable, and it gives a foundation for future work on multi-document or aspect-based summarisation.
 
 ## 6. Team Contribution Statement
 
 | Member | Primary contributions |
 |---|---|
-| Team Member 1 | Dataset curation and documentation; data validation tests; corpus design choices documented in `data/README.md`. |
-| Team Member 2 | TF-IDF feature engineering, the three classifier implementations (`src/nlp_project/model.py`), and the cross-model benchmark module. |
-| Team Member 3 | Cross-validation protocol, evaluation utilities, error analysis, and all report figures (`src/nlp_project/visualize.py`). |
-| Team Member 4 | Streamlit demo application (`src/nlp_project/app.py`), proposal PDF rendering, presentation deck, and the submission checklist. |
+| Nguyen Hoang Hieu (Ethan) | Dataset curation, web-scraping module (`nlp_project.scraper`), CNN/DailyMail and XSum fetch scripts. |
+| Thai Ba Hung | Text preprocessing (HTML cleaning, Unicode normalisation, sentence segmentation), exploratory length / vocabulary analysis. |
+| Nguyen Quoc Dang | Summarisation methods (Lead-3, TextRank graph + PageRank, BART pipeline), method-selection logic and ablation runs. |
+| Le Nguyen Gia Binh | ROUGE evaluation harness, all report figures, Streamlit demo, system integration, and final report preparation. |
 
-*All members co-authored this report and reviewed every pull request before merge. Replace the placeholder names with the real members of your team before submitting.*
+All four members co-authored this report, reviewed every merge into `main`, and rehearsed the presentation together.
 
-## 7. References
+## 7. Individual reflections (<= 250 words each)
 
-1. Pedregosa, F. et al. *Scikit-learn: Machine Learning in Python.* JMLR, 12, 2011.
-2. Manning, C. D., Raghavan, P., Schütze, H. *Introduction to Information Retrieval.* Cambridge University Press, 2008. (Chapter 6: Scoring, term weighting, and the vector space model.)
-3. Bird, S., Klein, E., Loper, E. *Natural Language Processing with Python.* O'Reilly, 2009.
-4. Jurafsky, D., Martin, J. H. *Speech and Language Processing.* 3rd ed. draft, 2024. (Chapters 4 and 5: Naive Bayes, Logistic Regression.)
-5. Joachims, T. *Text Categorization with Support Vector Machines.* ECML, 1998.
+### Nguyen Hoang Hieu (Ethan): Data and scraping
 
-## 8. Appendix
+My role focused on data collection, dataset organisation, and the scraping tools used by the demo. I helped prepare the bundled news sample, checked that each row followed the expected article-summary schema, and worked on `scripts/fetch_datasets.py` so the team could fetch CNN/DailyMail and XSum in a reproducible format. I also contributed to the web-scraping module that extracts article text from public URLs for the Streamlit app.
 
-### A. How to reproduce every number in this report
+The biggest challenge was that real news pages contain a lot of non-article text, including navigation links, cookie messages, share prompts, and subscription banners. I learned that data collection is not just downloading text; it also requires provenance, schema consistency, and careful cleaning before modelling can be trusted. This project improved my ability to turn messy online text into a usable NLP dataset. In future work, I would add stronger source metadata, duplicate detection across outlets, and a larger cached benchmark set for more reliable evaluation.
+
+### Thai Ba Hung: Preprocessing and exploratory analysis
+
+My role was preprocessing and exploratory analysis. I worked on HTML stripping, Unicode normalisation, boilerplate removal, and sentence segmentation. I also analysed article lengths, reference-summary lengths, compression ratios, and dataset balance so that the team could understand whether the sample data was suitable for summarisation experiments.
+
+The main challenge was choosing cleaning rules that remove noise without damaging useful language. At first, it was tempting to treat summarisation like classification and aggressively lowercase or remove punctuation. I learned that this hurts readability and can weaken summarisation models because punctuation, casing, and sentence boundaries are important signals. I also learned how simple statistics can reveal important modelling problems, such as summaries being much shorter than generated extractive outputs. In future work, I would improve sentence splitting for edge cases, add better boilerplate detection for scraped pages, and include richer EDA such as vocabulary overlap and named-entity coverage between articles and summaries.
+
+### Nguyen Quoc Dang: Summarisation modelling
+
+My role was summarisation modelling. I implemented and compared the Lead-3 baseline, TextRank extractive summariser, and the optional BART abstractive path. I helped design the method-selection logic so the project can run quickly offline with extractive methods but still support a stronger transformer model when the optional dependencies are installed.
+
+The main challenge was that news summarisation baselines are surprisingly strong. Lead-3 often performs well because news articles usually place the most important information near the beginning. This made it harder for TextRank to show large improvements on the bundled sample. I learned that a good NLP model is not always the most complex one; it must match the dataset and task constraints. I also learned how to structure code so that expensive models are loaded lazily and do not break testing. In future work, I would experiment with length-aware TextRank, chunking for long articles, and BART decoding settings to improve precision on XSum-style short references.
+
+### Le Nguyen Gia Binh: Evaluation, visualisation, and demo
+
+My role was evaluation, visualisation, system integration, and the Streamlit demo. I worked on the ROUGE evaluation harness, per-example qualitative review CSV, summary statistics, report figures, and the interactive interface where users can paste an article or fetch a URL and view a generated summary.
+
+The biggest challenge was making the results interpretable rather than just producing metric files. Mean ROUGE scores are useful, but they hide per-example failures, length mismatch, and precision-recall trade-offs. I learned to connect quantitative evaluation with qualitative examples so the team could explain why a method succeeds or fails. I also learned that a small working demo makes the project much easier to communicate because users can test the NLP system directly. In future work, I would add confidence-style diagnostics, side-by-side method comparison in the app, clearer error messages for failed URL scraping, and automatic PDF/report generation with embedded figures.
+
+## 8. References
+
+1. See, A., Liu, P. J., & Manning, C. D. (2017). *Get To The Point: Summarization with Pointer-Generator Networks.* ACL.
+2. Narayan, S., Cohen, S. B., & Lapata, M. (2018). *Don't Give Me the Details, Just the Summary! Topic-Aware Convolutional Neural Networks for Extreme Summarization.* EMNLP.
+3. Lewis, M., Liu, Y., Goyal, N., Ghazvininejad, M., Mohamed, A., Levy, O., Stoyanov, V., & Zettlemoyer, L. (2020). *BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension.* ACL.
+4. Lin, C.-Y. (2004). *ROUGE: A Package for Automatic Evaluation of Summaries.* Text Summarization Branches Out.
+5. Mihalcea, R., & Tarau, P. (2004). *TextRank: Bringing Order into Texts.* EMNLP.
+6. Hermann, K. M., Kočiský, T., Grefenstette, E., Espeholt, L., Kay, W., Suleyman, M., & Blunsom, P. (2015). *Teaching Machines to Read and Comprehend.* NeurIPS.
+
+## 9. Appendix
+
+### A. Reproducing every number in this report
 
 ```bash
-# 1. install
-python -m pip install -e ".[dev,app]"
+pip install -e ".[dev,app,data,transformer]"
 
-# 2. validate the dataset and run the pipeline end-to-end
+# Bundled sample (no internet, no GPU required)
 python -m nlp_project.cli run-all --config config/project_config.yaml
 
-# 3. launch the bonus interactive demo
+# Full CNN/DailyMail benchmark
+python scripts/fetch_datasets.py --dataset cnn_dailymail --split test --max-rows 500
+# (edit config/project_config.yaml: data.path -> data/cnn_dailymail.csv,
+#  model.use_abstractive -> true)
+python -m nlp_project.cli run-all --config config/project_config.yaml
+
+# Interactive prototype
 streamlit run src/nlp_project/app.py
 ```
 
-The end-to-end run regenerates `reports/metrics.json`, `reports/benchmark.csv`, every figure under `reports/figures/`, `proposal.md`, and `proposal.pdf`. The full pytest suite runs in under three seconds:
+The full pytest suite runs in ~4 seconds offline:
 
 ```bash
 python -m pytest -q
@@ -190,36 +306,19 @@ python -m pytest -q
 
 ```
 config/                  YAML config (single source of truth)
-data/                    sample_dataset.csv + dataset README
-src/nlp_project/         Python package (CLI, config, data, model, eval, viz, app)
-tests/                   pytest test suite
-reports/                 metrics, classification report, error analysis, figures
-artifacts/               serialised model pipelines
-scripts/                 helper scripts (pipeline + proposal-pdf rendering)
+data/                    bundled sample + dataset README
+src/nlp_project/
+  app.py                   Streamlit demo
+  cli.py                   command-line entry point
+  config.py                typed YAML loader
+  data.py                  loading, validation, splits
+  evaluate.py              ROUGE evaluation
+  preprocess.py            HTML cleaning + sentence segmentation
+  proposal.py              proposal markdown + PDF
+  scraper.py               news URL fetcher / parser
+  summarize.py             Lead-3, TextRank, BART
+  visualize.py             every report figure
+tests/                   pytest suite (26 tests, offline)
+scripts/                 fetch_datasets.py, render_proposal_pdf.py
+reports/                 metrics, figures, final_report.md, presentation.md
 ```
-
-### C. Configuration fields touched in this report
-
-`project.random_seed=42`, `model.type=tfidf_logistic_regression`, `model.ngram_range=[1,2]`, `model.max_features=5000`, `model.test_size=0.2`, `model.class_weight=balanced`. Every other setting in `config/project_config.yaml` is descriptive and used by the proposal/report generators.
-
----
-
-## Individual Reflections (max 250 words each)
-
-> **Replace the four placeholders below with each team member's authored reflection before submission.** Each reflection covers role, contributions, challenges, and key learning.
-
-### Team Member 1 — Role: Data lead
-
-*(≤ 250 words)* My focus this term was the dataset. I curated the 200-statement corpus, wrote the data-validation contract enforced by `nlp_project.data.validate_dataset`, and authored `data/README.md` to satisfy the assignment's provenance requirements. The biggest challenge was avoiding subtle label leakage when authoring statements — early drafts of negative examples reused the word *frustrating* so often that the model nearly memorised it. I rebalanced the wording, which lifted CV macro-F1 by several points. I learned that data work is design work, and that small upstream choices propagate everywhere downstream.
-
-### Team Member 2 — Role: Modelling lead
-
-*(≤ 250 words)* I owned `src/nlp_project/model.py` and the benchmark module. The most satisfying part was getting three different classifier families (logistic regression, Multinomial NB, Linear SVM) behind a single config switch with shared preprocessing — that constraint forced me to think clearly about what `Pipeline` should and should not capture. The hardest part was debugging the fallback split: stratified `train_test_split` raises when a class has fewer than two samples, so I added a tiny custom splitter for tiny datasets. I learned the value of treating a scikit-learn `Pipeline` as the deployable unit; everything downstream got simpler.
-
-### Team Member 3 — Role: Evaluation lead
-
-*(≤ 250 words)* I wrote the evaluation utilities, the error analysis pipeline, and every figure in this report (`src/nlp_project/visualize.py`). I expected error analysis to be the most tedious part of the project and was surprised by how much it taught me — the two recurring failure modes I documented (mixed sentiment, cross-span negation) are exactly the failures that motivate moving from bag-of-words to embeddings. I learned to read confusion matrices alongside the underlying examples, not as standalone numbers.
-
-### Team Member 4 — Role: Demo and submission lead
-
-*(≤ 250 words)* I built the Streamlit application and handled all of the submission logistics (proposal PDF formatting, presentation deck, GitHub collaborators). The interesting design problem was the *"Why?"* token-attribution panel: extracting per-token contributions from a scikit-learn `Pipeline` required reaching into the internal TF-IDF vectoriser and multiplying its output by the classifier's coefficients. I learned how much polish a tiny interactive demo adds — non-technical reviewers immediately grasped the model in ways that the same metrics in a table did not communicate.

@@ -1,19 +1,22 @@
-# NLP Final Project — Sentiment Analysis of Course Feedback
+# NewsDigest — News Collection and Automatic Summarisation
 
-COMP4020 / COMP5040 final project. A reproducible NLP pipeline plus an
-interactive Streamlit demo that classifies short higher-education course
-feedback as **positive** or **negative**, with cross-model benchmarking,
-visualisations, and a complete report.
+COMP4020 final project. A reproducible NLP pipeline plus an interactive
+Streamlit demo that takes an English news article (pasted text or a public URL)
+and produces a concise summary using Lead-3, TextRank, or BART.
+
+**Team:** Nguyen Hoang Hieu (Ethan) · Thai Ba Hung · Nguyen Quoc Dang · Le Nguyen Gia Binh
+**GitHub:** https://github.com/thaibahung/NLP-Project
 
 ## What's inside
 
-- **CLI pipeline** — validate, train, evaluate, predict, benchmark, visualize, run-all.
-- **Three classifiers behind one config switch** — logistic regression, Multinomial Naive Bayes, Linear SVM.
-- **5-fold stratified cross-validation** and a held-out test split, both reported.
-- **Five auto-generated figures** — confusion matrix, class distribution, top features, learning curve, cross-model benchmark.
-- **Interactive Streamlit web app (bonus deliverable)** — single-text and CSV-batch inference, confidence scores, and per-token "Why?" attribution.
+- **CLI pipeline** — `validate-data`, `summarize`, `scrape`, `evaluate`, `visualize`, `generate-proposal`, `run-all`.
+- **Three summarisation methods behind one config switch** — Lead-3 (baseline), TextRank (extractive), BART (abstractive).
+- **ROUGE-1 / ROUGE-2 / ROUGE-L / ROUGE-Lsum** evaluation with per-row qualitative CSV.
+- **Five auto-generated figures** — ROUGE comparison, article-length distribution, summary-length distribution, compression ratios, per-example ROUGE distribution.
+- **Web scraping** — fetch and clean a public news URL with BeautifulSoup heuristics.
+- **Streamlit demo (bonus deliverable)** — three tabs: paste article, fetch URL, live ROUGE recomputation.
 - **Final report** at [`reports/final_report.md`](reports/final_report.md) and **presentation deck** at [`reports/presentation.md`](reports/presentation.md).
-- **25 automated tests** covering config, data, preprocess, model, CLI, benchmark, visualisations, and proposal.
+- **26 automated tests** (config, data, preprocessing, summarisation, evaluation, visualisation, proposal, CLI). All pass offline in ~4 seconds.
 
 ## Setup
 
@@ -21,8 +24,14 @@ visualisations, and a complete report.
 python -m pip install -e ".[dev,app]"
 ```
 
-Python 3.11+ required. The `app` extra pulls in Streamlit for the bonus demo;
-the rest of the pipeline works without it.
+Extras:
+
+- `dev` — pytest + ruff
+- `app` — Streamlit (for the bonus web demo)
+- `data` — Hugging Face Datasets (only needed to fetch CNN/DailyMail or XSum)
+- `transformer` — transformers + torch + sentencepiece (only needed for BART)
+
+Python 3.11+ required.
 
 ## Run the full pipeline
 
@@ -30,57 +39,77 @@ the rest of the pipeline works without it.
 python -m nlp_project.cli run-all --config config/project_config.yaml
 ```
 
-Produces (under [`reports/`](reports/) and [`artifacts/`](artifacts/)):
+Outputs (under [`reports/`](reports/)):
 
-- `metrics.json`, `classification_report.txt`, `error_analysis.csv`
-- `benchmark.json`, `benchmark.csv`
-- `figures/confusion_matrix.png`, `class_distribution.png`, `top_features.png`, `learning_curve.png`, `benchmark.png`
-- `artifacts/model.joblib` (configured model) and `model_<type>.joblib` (each benchmarked model)
-- regenerated `proposal.md` and `proposal.pdf`
+- `rouge_metrics.json` — per-method mean ROUGE scores.
+- `method_summary.csv` — one row per method with ROUGE, length, compression, latency.
+- `qualitative_review.csv` — every test-row × method with ROUGE breakdown.
+- `figures/rouge_comparison.png`, `article_length.png`, `summary_length.png`, `compression_ratio.png`, `per_example_rouge.png`.
+- regenerated `proposal.md` and `proposal.pdf`.
 
-## Individual commands
+## CLI cheatsheet
 
-| Command | What it does |
+| Command | Purpose |
 |---|---|
-| `validate-data` | Schema and content checks on the configured CSV. |
-| `train` | Fit the model selected via `model.type`. |
-| `evaluate` | Hold-out evaluation; writes metrics + classification report + error analysis. |
-| `predict --text "..." [--proba]` | Predict a single string; optionally show class probabilities. |
-| `benchmark` | Train all three models on the same split; write a comparison CSV/JSON. |
-| `visualize` | Regenerate the five report figures. |
-| `generate-proposal` | Regenerate `proposal.md` from `config/project_config.yaml`. |
+| `validate-data` | Schema and length checks on the configured CSV. |
+| `summarize --text "..." --method lead_3` | Summarise a single string. |
+| `summarize --file path/to/article.txt --method textrank` | Summarise a file. |
+| `scrape --url <URL> --method bart --show-article` | Fetch a public news URL and summarise it. |
+| `evaluate` | Run every available method on the test split; write ROUGE reports. |
+| `visualize` | Regenerate the five report figures from the saved metrics. |
+| `generate-proposal` | Regenerate `proposal.md` from the YAML config. |
 | `run-all` | Everything above, in one command. |
 
-## Bonus deliverable — Streamlit demo
-
-```bash
-streamlit run src/nlp_project/app.py
-```
-
-The web app:
-
-1. Loads the trained artefact from `artifacts/model.joblib`.
-2. Accepts a single statement and returns label, confidence, and per-token attributions.
-3. Accepts a CSV upload for batch scoring (downloadable predictions).
-4. Recomputes held-out metrics on demand.
-5. Shows the cross-model benchmark from `reports/benchmark.csv` when available.
-
-Train the model at least once before launching the app:
-
-```bash
-python -m nlp_project.cli train --config config/project_config.yaml
-```
-
-## Switching classifiers
+## Switching summarisation method
 
 Edit `config/project_config.yaml`:
 
 ```yaml
 model:
-  type: tfidf_logistic_regression   # or tfidf_naive_bayes, tfidf_linear_svm
+  baseline: lead_3
+  extractive: textrank
+  abstractive: facebook/bart-large-cnn
+  num_sentences_extractive: 3
+  use_abstractive: false   # set to true after `pip install -e ".[transformer]"`
 ```
 
-Then `python -m nlp_project.cli train` to rebuild the artefact. No code change required.
+The pipeline will run any method that's available. BART is lazy-loaded the
+first time it's called.
+
+## Bonus deliverable — Streamlit demo
+
+```bash
+python -m nlp_project.cli evaluate    # populates method_summary.csv first
+streamlit run src/nlp_project/app.py
+```
+
+Three tabs:
+1. **Paste article** — type or paste a body and get summary + latency + compression.
+2. **Fetch URL** — give a public news URL; the app scrapes, cleans, and summarises it.
+3. **Evaluation** — view the saved method summary table and recompute ROUGE on demand.
+
+## Fetching the real benchmarks (CNN/DailyMail and XSum)
+
+```bash
+pip install -e ".[data]"
+python scripts/fetch_datasets.py --dataset cnn_dailymail --split test --max-rows 500
+python scripts/fetch_datasets.py --dataset xsum         --split test --max-rows 500
+```
+
+The script writes `data/cnn_dailymail.csv` and `data/xsum.csv` with the
+canonical `id,article,highlights,source,split` schema. Then update
+`config/project_config.yaml` → `data.path` and re-run `run-all`.
+
+## Enabling BART
+
+```bash
+pip install -e ".[transformer]"
+# config/project_config.yaml
+# model.use_abstractive: true
+python -m nlp_project.cli run-all
+```
+
+The first call downloads ~1.6 GB of model weights. Subsequent calls are cached.
 
 ## Tests
 
@@ -88,42 +117,33 @@ Then `python -m nlp_project.cli train` to rebuild the artefact. No code change r
 python -m pytest -q
 ```
 
-The suite runs in ~4 seconds offline and covers every public module.
-
-## Replacing the dataset
-
-1. Place the new CSV under `data/`.
-2. Update `config/project_config.yaml` — `data.path`, `text_column`, `label_column`, `id_column`, source, provenance, domain, challenges.
-3. Update `data/README.md` with the new dataset description.
-4. `python -m nlp_project.cli validate-data && python -m nlp_project.cli run-all`.
-
-## GitHub submission checklist
-
-- Keep the GitHub repository **private**.
-- Add `drelhaj` and `whistle-hikhi` as collaborators.
-- Include the final GitHub repository link in `proposal.md`, `proposal.pdf`, and the report.
-- Submit `proposal.pdf` (Phase 1), `reports/final_report.md` exported to PDF (Phase 2), and slides (Phase 3) to Canvas by their respective deadlines.
+26 tests, ~4 seconds, fully offline. Covers config, data validation, preprocessing,
+summarisation, ROUGE evaluation, visualisations, the proposal generator, and CLI.
 
 ## Repository layout
 
 ```
 config/                  YAML config (single source of truth)
-data/                    sample_dataset.csv + dataset README
-src/nlp_project/         Python package
+data/                    bundled news_sample.csv + dataset README
+src/nlp_project/
   app.py                   Streamlit demo (bonus deliverable)
-  benchmark.py             Cross-model benchmark + CV
-  cli.py                   Command-line entry point
-  config.py                Typed config loader
-  data.py                  Loading, validation, stratified split
-  evaluate.py              Held-out metrics + error analysis
-  features.py              TF-IDF vectoriser factory
-  model.py                 Three classifier families + persistence
-  preprocess.py            Deterministic text normaliser
-  proposal.py              Proposal markdown + PDF rendering
-  report.py                Metric summariser + confusion-matrix helper
-  visualize.py             All report figures
-tests/                   pytest suite (25 tests)
+  cli.py                   command-line entry point
+  config.py                typed YAML loader
+  data.py                  loading, validation, splits
+  evaluate.py              ROUGE evaluation
+  preprocess.py            HTML cleaning + sentence segmentation
+  proposal.py              proposal markdown + 1-page PDF
+  scraper.py               news URL fetcher / parser
+  summarize.py             Lead-3, TextRank, BART
+  visualize.py             every report figure
+tests/                   pytest suite (26 tests)
+scripts/                 fetch_datasets.py, run_pipeline.py, render_proposal_pdf.py
 reports/                 metrics, figures, final_report.md, presentation.md
-artifacts/               serialised model pipelines
-scripts/                 helper scripts (pipeline runner, proposal PDF)
 ```
+
+## GitHub submission checklist
+
+- Keep the GitHub repository private.
+- Add `drelhaj` and `whistle-hikhi` as collaborators.
+- Include the final GitHub link in `proposal.md`, `proposal.pdf`, and the report.
+- Submit Phase-1 PDF, Phase-2 final report (export `reports/final_report.md` to PDF), and Phase-3 slides to Canvas by their respective deadlines.

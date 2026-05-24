@@ -28,4 +28,6 @@ def test_placeholder_warnings_do_not_crash(repo_root):
     with pytest.warns(PlaceholderConfigWarning, match="placeholder"):
         config = load_config(repo_root / "config" / "project_config.yaml")
 
-    assert "replace-with" in config.project.domain
+    # Team member names remain placeholders until the real team fills them in;
+    # that is the placeholder marker the warning relies on.
+    assert any("Team Member" in member.name for member in config.team.members)

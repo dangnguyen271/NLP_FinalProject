@@ -4,12 +4,14 @@ import argparse
 from pathlib import Path
 import sys
 
+from nlp_project.benchmark import run_benchmark, summarize_benchmark
 from nlp_project.config import ConfigError, load_config
 from nlp_project.data import DataValidationError, load_and_validate_dataset, split_dataset
 from nlp_project.evaluate import evaluate_model
-from nlp_project.model import predict_texts_with_config, train_model
+from nlp_project.model import predict_proba_with_config, predict_texts_with_config, train_model
 from nlp_project.proposal import render_proposal_pdf, write_proposal
 from nlp_project.report import summarize_metrics
+from nlp_project.visualize import generate_all as generate_all_visualizations
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,6 +23,8 @@ def build_parser() -> argparse.ArgumentParser:
         "train",
         "evaluate",
         "generate-proposal",
+        "benchmark",
+        "visualize",
         "run-all",
     ):
         command = subparsers.add_parser(name)
@@ -30,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
     predict = subparsers.add_parser("predict")
     predict.add_argument("--config", default="config/project_config.yaml")
     predict.add_argument("--text", required=True)
+    predict.add_argument(
+        "--proba",
+        action="store_true",
+        help="Print per-class probabilities when the model supports them.",
+    )
     predict.set_defaults(func=_predict)
 
     return parser
@@ -77,6 +86,13 @@ def _predict(args: argparse.Namespace) -> None:
     config = load_config(args.config)
     prediction = predict_texts_with_config(config, [args.text])[0]
     print(f"Predicted label: {prediction}")
+    if getattr(args, "proba", False):
+        probs = predict_proba_with_config(config, [args.text])
+        if probs is None:
+            print("Probabilities: unavailable for this model type.")
+        else:
+            scores = ", ".join(f"{label}={score:.3f}" for label, score in probs[0].items())
+            print(f"Probabilities: {scores}")
 
 
 def _generate_proposal(args: argparse.Namespace) -> None:
@@ -85,12 +101,32 @@ def _generate_proposal(args: argparse.Namespace) -> None:
     print(f"Proposal written to {proposal_path}")
 
 
+def _benchmark(args: argparse.Namespace) -> None:
+    config = load_config(args.config)
+    report = run_benchmark(config)
+    print(summarize_benchmark(report.rows))
+    print(f"\nBenchmark JSON: {report.json_path}")
+    print(f"Benchmark CSV:  {report.csv_path}")
+
+
+def _visualize(args: argparse.Namespace) -> None:
+    config = load_config(args.config)
+    outputs = generate_all_visualizations(config)
+    for name, path in outputs.__dict__.items():
+        if path is None:
+            print(f"{name}: skipped (matplotlib unavailable)")
+        else:
+            print(f"{name}: {path}")
+
+
 def _run_all(args: argparse.Namespace) -> None:
     config = load_config(args.config)
     df, summary = load_and_validate_dataset(config)
     splits = split_dataset(df, config)
     _, artifact_path = train_model(config, splits.train)
     result = evaluate_model(config, test_df=splits.test)
+    benchmark = run_benchmark(config)
+    visualizations = generate_all_visualizations(config, benchmark_rows=benchmark.rows)
     proposal_path = write_proposal(config)
     pdf_path = render_proposal_pdf(proposal_path, config.repo_root / "proposal.pdf")
 
@@ -99,6 +135,12 @@ def _run_all(args: argparse.Namespace) -> None:
     print(f"Metrics: {result.metrics_path}")
     print(f"Classification report: {result.classification_report_path}")
     print(f"Error analysis: {result.error_analysis_path}")
+    print(f"Benchmark CSV: {benchmark.csv_path}")
+    print("Benchmark summary:")
+    print(summarize_benchmark(benchmark.rows))
+    for name, path in visualizations.__dict__.items():
+        if path is not None:
+            print(f"Figure {name}: {path}")
     print(f"Proposal markdown: {proposal_path}")
     if pdf_path is not None:
         print(f"Proposal PDF: {Path(pdf_path)}")
@@ -111,6 +153,8 @@ _COMMANDS = {
     "train": _train,
     "evaluate": _evaluate,
     "generate-proposal": _generate_proposal,
+    "benchmark": _benchmark,
+    "visualize": _visualize,
     "run-all": _run_all,
 }
 

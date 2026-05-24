@@ -65,13 +65,29 @@ def summarize_batch(
 # --------------------------------------------------------------------------- #
 
 
+def _effective_n(requested: int, total_sentences: int, max_ratio: float = 0.6) -> int:
+    """Cap the extractive output so every summary is shorter than its source.
+
+    Forces at least one sentence dropped, even if the user asks for more
+    sentences than the article contains, so the output is always a real summary
+    rather than a verbatim copy of the input.
+    """
+
+    if total_sentences <= 1:
+        return 1
+    ratio_cap = max(1, int(round(total_sentences * max_ratio)))
+    drop_one = max(1, total_sentences - 1)
+    return max(1, min(requested, ratio_cap, drop_one))
+
+
 def lead_n(article: str, n: int = 3) -> str:
-    """The single most reliable baseline in news summarisation: take the first n sentences."""
+    """Lead-n baseline: take the first n sentences (capped for compression)."""
 
     sentences = split_sentences(article)
     if not sentences:
         return ""
-    return " ".join(sentences[: max(1, n)])
+    effective = _effective_n(n, len(sentences))
+    return " ".join(sentences[:effective])
 
 
 def textrank(article: str, n: int = 3) -> str:
@@ -80,8 +96,9 @@ def textrank(article: str, n: int = 3) -> str:
     sentences = split_sentences(article)
     if not sentences:
         return ""
-    if len(sentences) <= n:
-        return " ".join(sentences)
+    effective = _effective_n(n, len(sentences))
+    if len(sentences) <= effective:
+        return " ".join(sentences[:effective])
 
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
@@ -91,7 +108,7 @@ def textrank(article: str, n: int = 3) -> str:
     try:
         matrix = vectorizer.fit_transform(sentences)
     except ValueError:
-        # All sentences are stop-words only — degrade to lead-n
+        # All sentences are stop-words only — degrade to lead-n.
         return lead_n(article, n=n)
 
     similarity = cosine_similarity(matrix)
@@ -100,7 +117,7 @@ def textrank(article: str, n: int = 3) -> str:
     scores = nx.pagerank(graph, max_iter=200, tol=1e-4)
 
     ranked = sorted(range(len(sentences)), key=lambda idx: -scores[idx])
-    chosen = sorted(ranked[:n])  # restore original article order
+    chosen = sorted(ranked[:effective])  # restore original article order
     return " ".join(sentences[idx] for idx in chosen)
 
 

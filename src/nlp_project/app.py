@@ -16,6 +16,7 @@ import pandas as pd
 
 from nlp_project.config import AppConfig, find_repo_root, load_config
 from nlp_project.evaluate import evaluate_summarizers, summarize_evaluation
+from nlp_project.preprocess import split_sentences
 from nlp_project.scraper import ScrapeError, fetch_article
 from nlp_project.summarize import (
     AbstractiveUnavailableError,
@@ -107,6 +108,13 @@ def main() -> None:  # pragma: no cover - UI entrypoint
             if not (article or "").strip():
                 st.warning("Enter article text first.")
             else:
+                input_sentences = len(split_sentences(article))
+                if method in ("lead_3", "textrank") and input_sentences <= 2:
+                    st.warning(
+                        f"The pasted article only has {input_sentences} sentence(s); "
+                        "extractive methods need at least 3–4 sentences to produce a "
+                        "meaningful summary. Switch to BART or paste a longer article."
+                    )
                 try:
                     result = summarize(method, article, config_with_n)
                 except AbstractiveUnavailableError as exc:
@@ -119,6 +127,10 @@ def main() -> None:  # pragma: no cover - UI entrypoint
                     with col_b:
                         st.metric("Method", result.method)
                         st.metric("Latency", f"{result.elapsed_seconds:.3f} s")
+                        st.metric("Input sentences", input_sentences)
+                        st.metric(
+                            "Summary sentences", len(split_sentences(result.summary))
+                        )
                         compression = len(result.summary.split()) / max(1, len(article.split()))
                         st.metric("Compression", f"{compression:.1%}")
 

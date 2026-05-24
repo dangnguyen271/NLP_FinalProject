@@ -111,29 +111,52 @@ def textrank(article: str, n: int = 3) -> str:
 
 @lru_cache(maxsize=1)
 def _load_bart_pipeline(model_name: str):
+    """Load (tokenizer, model) for seq2seq summarisation.
+
+    Uses the direct AutoTokenizer / AutoModelForSeq2SeqLM API rather than the
+    high-level `pipeline()` helper because the `summarization` pipeline task
+    was removed from transformers 5.x. This implementation is version-stable
+    across transformers 4.x and 5.x.
+    """
+
     try:
-        from transformers import pipeline
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
     except ImportError as exc:  # pragma: no cover - exercised when extra is missing
         raise AbstractiveUnavailableError(
             "transformers is required for abstractive summarisation. "
             "Install with `pip install -e \".[transformer]\"`."
         ) from exc
-    return pipeline("summarization", model=model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+    model.eval()
+    return tokenizer, model
 
 
 def bart_summarize(article: str, model_config: ModelConfig) -> str:
-    """Wrap Hugging Face's summarization pipeline with project config defaults."""
+    """Run a BART (or distilbart) summariser on a single article."""
 
-    pipe = _load_bart_pipeline(model_config.abstractive)
-    # The HF pipeline truncates by default but takes word count for min/max length.
-    output = pipe(
+    tokenizer, model = _load_bart_pipeline(model_config.abstractive)
+
+    inputs = tokenizer(
         article,
-        min_length=model_config.min_summary_tokens,
-        max_length=model_config.max_summary_tokens,
-        do_sample=False,
+        max_length=model_config.max_input_tokens,
         truncation=True,
+        return_tensors="pt",
     )
-    return str(output[0]["summary_text"]).strip()
+
+    import torch
+
+    with torch.inference_mode():
+        output_ids = model.generate(
+            **inputs,
+            min_length=model_config.min_summary_tokens,
+            max_length=model_config.max_summary_tokens,
+            num_beams=4,
+            length_penalty=2.0,
+            no_repeat_ngram_size=3,
+            early_stopping=True,
+        )
+    return tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
 
 
 def available_methods(config: AppConfig) -> tuple[str, ...]:

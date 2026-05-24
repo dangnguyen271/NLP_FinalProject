@@ -44,13 +44,15 @@ data:
 model:
   baseline: "lead_3"
   extractive: "textrank"
-  abstractive: "facebook/bart-large-cnn"
+  # distilbart is ~half the size of bart-large-cnn but is the official distilled
+  # checkpoint trained on the same CNN/DailyMail data — same quality on news.
+  abstractive: "sshleifer/distilbart-cnn-12-6"
   max_input_tokens: 1024
-  min_summary_tokens: 40
-  max_summary_tokens: 130
+  min_summary_tokens: 30
+  max_summary_tokens: 90
   num_sentences_extractive: 3
   artifact_dir: "artifacts"
-  use_abstractive: false
+  use_abstractive: true
 
 evaluation:
   rouge_variants: ["rouge1", "rouge2", "rougeL", "rougeLsum"]

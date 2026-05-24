@@ -79,7 +79,6 @@ def render_proposal_pdf(
         from reportlab.lib.pagesizes import LETTER
         from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import inch
-        from reportlab.pdfgen import canvas
         from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
     except ImportError as exc:
         print(f"PDF export skipped: reportlab is unavailable ({exc}).")
@@ -99,31 +98,31 @@ def render_proposal_pdf(
         parent=styles["BodyText"],
         fontName="Times-Roman",
         fontSize=12,
-        leading=14,
+        leading=12.5,
         alignment=TA_LEFT,
-        spaceAfter=3,
+        spaceAfter=1,
     )
     title = ParagraphStyle(
         "ProjectTitle",
         parent=base,
         fontName="Times-Bold",
         fontSize=12,
-        leading=14,
-        spaceAfter=5,
+        leading=12.5,
+        spaceAfter=2,
     )
     heading = ParagraphStyle(
         "ProjectHeading",
         parent=base,
         fontName="Times-Bold",
         textColor=colors.black,
-        spaceBefore=4,
-        spaceAfter=2,
+        spaceBefore=1,
+        spaceAfter=1,
     )
 
     story = []
     for line in markdown_text.splitlines():
         if not line.strip():
-            story.append(Spacer(1, 2))
+            story.append(Spacer(1, 1))
             continue
         if line.startswith("# "):
             story.append(Paragraph(_clean_markdown(line[2:]), title))
@@ -137,13 +136,6 @@ def render_proposal_pdf(
             story.append(Paragraph(_clean_markdown(line), base))
 
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
-    page_count = {"count": 0}
-
-    class CountingCanvas(canvas.Canvas):
-        def save(self) -> None:
-            page_count["count"] = self._pageNumber
-            super().save()
-
     doc = SimpleDocTemplate(
         str(pdf_path),
         pagesize=LETTER,
@@ -152,10 +144,11 @@ def render_proposal_pdf(
         topMargin=0.65 * inch,
         bottomMargin=0.65 * inch,
     )
-    doc.build(story, canvasmaker=CountingCanvas)
-    if page_count["count"] > 1:
+    doc.build(story)
+    page_count = _count_pdf_pages(pdf_path)
+    if page_count > 1:
         print(
-            f"Warning: proposal PDF rendered to {page_count['count']} pages. "
+            f"Warning: proposal PDF rendered to {page_count} pages. "
             "Shorten config text to meet the one-page submission requirement."
         )
     return pdf_path
@@ -197,6 +190,11 @@ def _clean_markdown(text: str) -> str:
     text = re.sub(r"`([^`]+)`", r"\1", text)
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
     return escape(text)
+
+
+def _count_pdf_pages(pdf_path: Path) -> int:
+    content = pdf_path.read_bytes()
+    return len(re.findall(rb"/Type\s*/Page\b", content))
 
 
 def required_proposal_sections() -> Iterable[str]:

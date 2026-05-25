@@ -9,7 +9,7 @@
     },
     "mean_summary_length": 71.33333333333333,
     "mean_compression_ratio": 0.3678969246691698,
-    "mean_inference_seconds": 3.1819334253668785e-05,
+    "mean_inference_seconds": 3.515283363716056e-05,
     "n_examples": 6
   },
   {
@@ -22,7 +22,7 @@
     },
     "mean_summary_length": 61.166666666666664,
     "mean_compression_ratio": 0.3144647073287843,
-    "mean_inference_seconds": 0.0155225206593362,
+    "mean_inference_seconds": 0.01490627099944201,
     "n_examples": 6
   },
   {
@@ -35,7 +35,7 @@
     },
     "mean_summary_length": 50.0,
     "mean_compression_ratio": 0.25727368192638556,
-    "mean_inference_seconds": 4.138273541660358,
+    "mean_inference_seconds": 2.8899981598333397,
     "n_examples": 6
   }
 ]
